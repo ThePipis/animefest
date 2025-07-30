@@ -1,22 +1,27 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom'; // ✅ Remover useNavigate
 import { motion } from 'framer-motion';
-import { useAuthStore } from '../stores/authStore';
+import { useAuth } from '../hooks/useAuth';
 
 export const Login: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuthStore();
-  const navigate = useNavigate();
+  const { login } = useAuth();
+  // ✅ Remover esta línea: const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      await login(username, password);
-      navigate('/');
+      const result = await login(username, password);
+      if (result.success) {
+        // La navegación ya se maneja dentro de useAuth
+      } else {
+        console.error('Error al iniciar sesión:', result.error);
+        // Aquí puedes mostrar el error al usuario
+      }
     } catch (error) {
       console.error('Error al iniciar sesión:', error);
     } finally {

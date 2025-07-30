@@ -18,6 +18,7 @@ interface Anime {
 }
 
 interface FilterState {
+  letra: string;
   genero: string[];
   año: string[];
   categoria: string[];
@@ -32,6 +33,7 @@ export const Catalogo: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGenre, setSelectedGenre] = useState('');
   const [activeFilters, setActiveFilters] = useState<FilterState>({
+    letra: '',
     genero: [],
     año: [],
     categoria: [],
@@ -73,6 +75,13 @@ export const Catalogo: React.FC = () => {
     fetchAnimes();
   }, [fetchAnimes]);
 
+  const handleFiltersApply = useCallback((filters: FilterState) => {
+    console.log('🔧 Filters applied:', filters);
+    console.log('📊 Available animes:', animes.length);
+    setActiveFilters(filters);
+    setSelectedGenre(filters.genero.length > 0 ? filters.genero[0] : '');
+  }, [animes.length]);
+  
   // Mejorar la lógica de filtrado
   const filteredAnimes = animes.filter(anime => {
     // Filtro de búsqueda por texto
@@ -80,6 +89,15 @@ export const Catalogo: React.FC = () => {
       anime.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       anime.sinopsis.toLowerCase().includes(searchTerm.toLowerCase()) ||
       anime.generos.some(genero => genero.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    // Filtro por letra
+    const matchesLetter = activeFilters.letra === '' || (() => {
+      const firstChar = anime.titulo.charAt(0).toUpperCase();
+      if (activeFilters.letra === '0-9') {
+        return /[0-9]/.test(firstChar);
+      }
+      return firstChar === activeFilters.letra;
+    })();
     
     // Filtro por género
     const matchesGenre = activeFilters.genero.length === 0 || 
@@ -93,21 +111,40 @@ export const Catalogo: React.FC = () => {
     const matchesYear = activeFilters.año.length === 0 || 
       activeFilters.año.includes(anime.año.toString());
     
-    // Filtro por categoría
+    // Filtro por categoría - AGREGAR LOG
     const matchesCategory = activeFilters.categoria.length === 0 || 
-      activeFilters.categoria.some(filterCat => 
-        anime.categoria.toLowerCase() === filterCat.toLowerCase()
-      );
+      activeFilters.categoria.some(filterCat => {
+        if (!filterCat || filterCat === undefined) {
+          return false;
+        }
+        const matches = anime.categoria.toLowerCase() === filterCat.toLowerCase();
+        // Remover estos logs:
+        // if (activeFilters.categoria.length > 0) {
+        //   console.log(`🎯 Category filter: ${filterCat} vs ${anime.categoria} = ${matches}`);
+        // }
+        return matches;
+      });
     
+    // AGREGAR ESTA LÍNEA QUE FALTA:
     // Filtro por estado
     const matchesStatus = activeFilters.estado.length === 0 || 
       activeFilters.estado.some(filterStatus => 
+        filterStatus && anime.estado && 
         anime.estado.toLowerCase() === filterStatus.toLowerCase()
       );
     
-    return matchesSearch && matchesGenre && matchesYear && matchesCategory && matchesStatus;
+    const result = matchesSearch && matchesLetter && matchesGenre && matchesYear && matchesCategory && matchesStatus;
+    
+    if (activeFilters.categoria.length > 0) {
+      console.log(`📝 Anime "${anime.titulo}" - Category: ${anime.categoria}, Matches: ${result}`);
+    }
+    
+    return result;
   });
-
+  
+  // Agregar log del resultado final
+  console.log('🎬 Filtered animes count:', filteredAnimes.length);
+  console.log('🎭 Active category filters:', activeFilters.categoria);
   // Aplicar ordenamiento
   const sortedAnimes = [...filteredAnimes].sort((a, b) => {
     switch (activeFilters.orden) {
@@ -123,11 +160,6 @@ export const Catalogo: React.FC = () => {
         return 0; // Por defecto, mantener orden original
     }
   });
-
-  const handleFiltersApply = (filters: FilterState) => {
-    setActiveFilters(filters);
-    setSelectedGenre(filters.genero.length > 0 ? filters.genero[0] : '');
-  };
 
   const handleAnimeClick = (animeId: number) => {
     navigate(`/anime/${animeId}`);
@@ -225,9 +257,14 @@ export const Catalogo: React.FC = () => {
             <h3 className="text-xl font-semibold text-white mb-2">
               No se encontraron resultados
             </h3>
-            <p className="text-gray-400">
+            <p className="text-gray-400 mb-4">
               Intenta con otros términos de búsqueda o filtros
             </p>
+            {/* AGREGAR INFO DE DEBUG */}
+            <div className="text-xs text-gray-500 mt-4">
+              <p>Total animes: {animes.length}</p>
+              <p>Filtros activos: {JSON.stringify(activeFilters)}</p>
+            </div>
           </div>
         )}
 

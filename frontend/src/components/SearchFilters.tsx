@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { ChevronDownIcon, CheckIcon, XMarkIcon } from "@heroicons/react/24/solid";
 
 interface Anime {
@@ -58,7 +58,9 @@ const labelMap: Record<FilterKey | 'orden' | 'letra', string> = {
 };
 
 const getUnique = (arr: (string | number)[]): string[] => {
-  return Array.from(new Set(arr)).filter(Boolean).map(String);
+  return Array.from(new Set(arr))
+    .filter(item => item !== undefined && item !== null && item !== '')
+    .map(String);
 };
 
 export default function SearchFilters({ onFiltersApply }: SearchFiltersProps) {
@@ -84,7 +86,8 @@ export default function SearchFilters({ onFiltersApply }: SearchFiltersProps) {
     const fetchOptions = async () => {
       try {
         setLoading(true);
-        const response = await fetch("http://localhost:3001/animes");
+        // Cambiar de "/animes" a "/catalogo" para usar la misma fuente
+        const response = await fetch("http://localhost:3001/catalogo");
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -122,39 +125,46 @@ export default function SearchFilters({ onFiltersApply }: SearchFiltersProps) {
     return () => document.removeEventListener("mousedown", close);
   }, []);
 
-  const handleMulti = (key: FilterKey, value: string) => {
+  const handleMulti = useCallback((key: FilterKey, value: string) => {
+    // Remover esta línea: console.log('handleMulti called with:', key, value, typeof value);
+    
+    if (!value || value === undefined || value === null) {
+      return;
+    }
+    
     setFilters((f) => {
       const arr = f[key].includes(value)
         ? f[key].filter((v) => v !== value)
         : [...f[key], value];
       return { ...f, [key]: arr };
     });
-  };
+  }, []);
 
-  const handleRadio = (value: string) => {
+  const handleRadio = useCallback((value: string) => {
     setFilters((f) => ({ ...f, orden: value }));
     setDropdown(null);
-  };
+  }, []);
 
-  const handleLetter = (value: string) => {
+  const handleLetter = useCallback((value: string) => {
     setFilters((f) => ({ ...f, letra: value === "Seleccionar" ? "" : value }));
     setDropdown(null);
-  };
+  }, []);
 
-  const clearFilter = (key: FilterKey) => {
+  const clearFilter = useCallback((key: FilterKey) => {
     setFilters((f) => ({ ...f, [key]: [] }));
-  };
+  }, []);
 
-  const clearLetter = () => {
+  const clearLetter = useCallback(() => {
     setFilters((f) => ({ ...f, letra: "" }));
-  };
+  }, []);
 
-  // Auto-filtrado al cambiar cualquier filtro
+  // Auto-filtrado al cambiar cualquier filtro - CORREGIDO
   useEffect(() => {
     if (onFiltersApply) {
       onFiltersApply(filters);
     }
-  }, [filters, onFiltersApply]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]); // Removed onFiltersApply from dependencies array
 
   if (loading) {
     return (
@@ -250,26 +260,34 @@ export default function SearchFilters({ onFiltersApply }: SearchFiltersProps) {
             )}
           </button>
           {dropdown === key && (
-            <div className="absolute left-0 z-[9999] mt-2 w-full bg-slate-100 border border-slate-200 rounded-xl shadow-2xl p-4 grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+            <div className={`absolute left-0 z-[9999] mt-2 bg-slate-100 border border-slate-200 rounded-xl shadow-2xl p-3 ${
+              key === 'año' || key === 'estado' 
+                ? 'grid grid-cols-2 gap-2 w-fit min-w-[200px]' 
+                : key === 'categoria'
+                ? 'flex flex-col gap-1 w-fit min-w-[280px] max-w-[350px]'
+                : 'grid grid-cols-3 gap-2 w-fit min-w-[450px] max-w-[550px]'
+            }`}>
               {options[key].length === 0 ? (
-                <div className="col-span-2 text-center text-slate-500 py-4">
+                <div className={`text-center text-slate-500 py-3 text-xs ${
+                  key === 'año' || key === 'estado' ? 'col-span-2' : key === 'categoria' ? '' : 'col-span-3'
+                }`}>
                   No hay opciones disponibles
                 </div>
               ) : (
                 options[key].map((option) => (
-                  <label key={option} className="flex items-center gap-2 cursor-pointer select-none text-slate-700 hover:bg-blue-50 rounded px-2 py-1 transition-colors">
+                  <label key={option} className="flex items-center gap-2 cursor-pointer select-none text-slate-700 hover:bg-blue-50 rounded px-2 py-1.5 transition-colors whitespace-nowrap">
                     <input
                       type="checkbox"
                       checked={filters[key].includes(option)}
                       onChange={() => handleMulti(key, option)}
                       className="hidden"
                     />
-                    <span className={`w-5 h-5 flex items-center justify-center border-2 rounded transition-colors ${
+                    <span className={`w-3.5 h-3.5 flex items-center justify-center border-2 rounded transition-colors flex-shrink-0 ${
                       filters[key].includes(option) ? "border-blue-500 bg-blue-500" : "border-slate-300 bg-white"
                     }`}>
-                      {filters[key].includes(option) && <CheckIcon className="w-4 h-4 text-white" />}
+                      {filters[key].includes(option) && <CheckIcon className="w-2.5 h-2.5 text-white" />}
                     </span>
-                    <span className="truncate text-sm">{option}</span>
+                    <span className="text-xs">{option}</span>
                   </label>
                 ))
               )}
