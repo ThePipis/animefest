@@ -224,10 +224,10 @@ export default function SearchFilters({ onFiltersApply }: SearchFiltersProps) {
 
       {/* Filtros multiselección */}
       {(["genero", "año", "categoria", "estado"] as FilterKey[]).map((key) => (
-        <div key={key} className="relative flex-shrink-0">
+        <div key={key} className="relative flex-1 min-w-0">
           <button
             type="button"
-            className={`flex items-center justify-between min-w-[140px] max-w-[180px] px-3 py-2 bg-white border border-slate-200 rounded-lg shadow-sm text-gray-700 font-medium transition-all duration-200 focus:outline-none hover:border-slate-300 hover:shadow-md ${
+            className={`flex items-center justify-between w-full px-3 py-2 bg-white border border-slate-200 rounded-lg shadow-sm text-gray-700 font-medium transition-all duration-200 focus:outline-none hover:border-slate-300 hover:shadow-md ${
               dropdown === key ? "ring-2 ring-blue-300 border-blue-300" : ""
             }`}
             onClick={() => setDropdown(dropdown === key ? null : key)}
@@ -250,7 +250,7 @@ export default function SearchFilters({ onFiltersApply }: SearchFiltersProps) {
             )}
           </button>
           {dropdown === key && (
-            <div className="absolute left-0 z-[9999] mt-2 w-64 bg-slate-100 border border-slate-200 rounded-xl shadow-2xl p-4 grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+            <div className="absolute left-0 z-[9999] mt-2 w-full bg-slate-100 border border-slate-200 rounded-xl shadow-2xl p-4 grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
               {options[key].length === 0 ? (
                 <div className="col-span-2 text-center text-slate-500 py-4">
                   No hay opciones disponibles
