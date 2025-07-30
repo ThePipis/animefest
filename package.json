@@ -1,0 +1,34 @@
+{
+  "name": "animefest",
+  "version": "1.0.0",
+  "description": "Plataforma web moderna tipo Kodi para anime con streaming y gestión de usuarios",
+  "main": "index.js",
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd mock-backend && npm run dev",
+    "dev:full": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "install:all": "npm install && cd frontend && npm install && cd ../mock-backend && npm install",
+    "build": "cd frontend && npm run build",
+    "start": "cd mock-backend && npm start"
+  },
+  "keywords": [
+    "anime",
+    "streaming",
+    "react",
+    "vite",
+    "express"
+  ],
+  "author": "AnimeFest Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^9.2.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^3.3.2",
+    "nodemon": "^3.1.10"
+  }
+}

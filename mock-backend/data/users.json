@@ -1,0 +1,45 @@
+[
+  {
+    "id": 1,
+    "username": "admin",
+    "email": "admin@animefest.com",
+    "password": "$2b$10$XxF2jb0qoP/BrIKhfEn61e6YBTkKp5XggmNVdyE7aN5X2MoHjszF6",
+    "favoritos": [
+      3,
+      1
+    ],
+    "historial": [
+      {
+        "animeId": 1,
+        "episodio": 1,
+        "progreso": 85,
+        "fechaVisto": "2024-01-15T10:30:00Z"
+      },
+      {
+        "animeId": 2,
+        "episodio": 1,
+        "progreso": 100,
+        "fechaVisto": "2024-01-14T20:15:00Z"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "username": "otaku_fan",
+    "email": "fan@example.com",
+    "password": "$2b$10$XxF2jb0qoP/BrIKhfEn61e6YBTkKp5XggmNVdyE7aN5X2MoHjszF6",
+    "favoritos": [
+      2,
+      4,
+      5
+    ],
+    "historial": [
+      {
+        "animeId": 3,
+        "episodio": 1,
+        "progreso": 45,
+        "fechaVisto": "2024-01-16T14:20:00Z"
+      }
+    ]
+  }
+]

@@ -1,0 +1,42 @@
+{
+  "años": [
+    2025,
+    2024,
+    2019,
+    1998
+  ],
+  "generos": [
+    "Acción",
+    "Aventura",
+    "Ciencia Ficción",
+    "Comedia",
+    "Drama",
+    "Ecchi",
+    "Escolares",
+    "Fantasía",
+    "Harem",
+    "Josei",
+    "Magia",
+    "Militar",
+    "Música",
+    "Parodias",
+    "Romance",
+    "Seinen",
+    "Shonen",
+    "Sobrenatural"
+  ],
+  "idiomas": [
+    "Castellano",
+    "Latino"
+  ],
+  "categorias": [
+    "Anime",
+    "Latino Sin Censura",
+    "Película",
+    "Serie"
+  ],
+  "estados": [
+    "En emisión",
+    "Finalizado"
+  ]
+}
