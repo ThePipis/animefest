@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { FunnelIcon, ChevronDownIcon, CheckIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import { ChevronDownIcon, CheckIcon, XMarkIcon } from "@heroicons/react/24/solid";
 
 interface Anime {
   id: number;
@@ -11,6 +11,7 @@ interface Anime {
 }
 
 interface FilterState {
+  letra: string;
   genero: string[];
   año: string[];
   categoria: string[];
@@ -30,7 +31,7 @@ interface SearchFiltersProps {
 }
 
 type FilterKey = 'genero' | 'año' | 'categoria' | 'estado';
-type DropdownState = FilterKey | 'orden' | null;
+type DropdownState = FilterKey | 'orden' | 'letra' | null;
 
 const ORDER_OPTIONS = [
   "Por Defecto",
@@ -40,7 +41,15 @@ const ORDER_OPTIONS = [
   "Calificación"
 ] as const;
 
-const labelMap: Record<FilterKey | 'orden', string> = {
+const LETTER_OPTIONS = [
+  "Seleccionar",
+  "0-9",
+  "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+  "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"
+] as const;
+
+const labelMap: Record<FilterKey | 'orden' | 'letra', string> = {
+  letra: "Letra",
   genero: "Género",
   año: "Año",
   categoria: "Tipo",
@@ -54,6 +63,7 @@ const getUnique = (arr: (string | number)[]): string[] => {
 
 export default function SearchFilters({ onFiltersApply }: SearchFiltersProps) {
   const [filters, setFilters] = useState<FilterState>({
+    letra: "",
     genero: [],
     año: [],
     categoria: [],
@@ -126,16 +136,20 @@ export default function SearchFilters({ onFiltersApply }: SearchFiltersProps) {
     setDropdown(null);
   };
 
+  const handleLetter = (value: string) => {
+    setFilters((f) => ({ ...f, letra: value === "Seleccionar" ? "" : value }));
+    setDropdown(null);
+  };
+
   const clearFilter = (key: FilterKey) => {
     setFilters((f) => ({ ...f, [key]: [] }));
   };
 
-  const handleApply = () => {
-    if (onFiltersApply) {
-      onFiltersApply(filters);
-    }
+  const clearLetter = () => {
+    setFilters((f) => ({ ...f, letra: "" }));
   };
 
+  // Auto-filtrado al cambiar cualquier filtro
   useEffect(() => {
     if (onFiltersApply) {
       onFiltersApply(filters);
@@ -144,121 +158,163 @@ export default function SearchFilters({ onFiltersApply }: SearchFiltersProps) {
 
   if (loading) {
     return (
-      <div className="w-full flex items-center justify-center bg-white rounded-xl shadow-md px-4 py-4">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-        <span className="ml-2 text-gray-600">Cargando filtros...</span>
+      <div className="w-full flex items-center justify-center bg-slate-800/95 backdrop-blur-sm rounded-xl shadow-lg px-4 py-4">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400"></div>
+        <span className="ml-2 text-slate-300">Cargando filtros...</span>
       </div>
     );
   }
 
   return (
-    <div ref={ref} className="w-full flex flex-wrap gap-2 md:gap-3 items-center bg-white rounded-xl shadow-md px-4 py-4">
-      {/* Contenedor de filtros */}
-      <div className="flex flex-wrap gap-2 md:gap-3 items-center flex-1">
-        {/* Filtros */}
-        {(["genero", "año", "categoria", "estado"] as FilterKey[]).map((key) => (
-          <div key={key} className="relative flex-shrink-0">
-            <button
-              type="button"
-              className={`flex items-center justify-between min-w-[140px] max-w-[180px] px-3 py-2 bg-white border border-gray-200 rounded-lg shadow-sm text-gray-700 font-medium transition-all duration-200 focus:outline-none hover:border-gray-300 hover:shadow-md ${
-                dropdown === key ? "ring-2 ring-blue-300 border-blue-300" : ""
-              }`}
-              onClick={() => setDropdown(dropdown === key ? null : key)}
-            >
-              <span className="text-gray-400 text-xs mr-2">{labelMap[key]}:</span>
-              <span className={`truncate flex-1 text-left text-xs ${
-                filters[key].length ? "text-blue-600 font-semibold" : "text-gray-500"
-              }`}>
-                {filters[key].length === 0 ? "Todos" : `${filters[key].length} sel.`}
-              </span>
-              <ChevronDownIcon className="w-4 h-4 ml-1 text-gray-400 flex-shrink-0" />
-              {filters[key].length > 0 && (
-                <XMarkIcon 
-                  className="w-3 h-3 ml-1 text-gray-400 hover:text-red-500 cursor-pointer flex-shrink-0 transition-colors" 
-                  onClick={(e) => {
-                    e.stopPropagation(); 
-                    clearFilter(key);
-                  }} 
-                />
-              )}
-            </button>
-            {dropdown === key && (
-              <div className="absolute left-0 z-20 mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-lg p-4 grid grid-cols-2 gap-2 animate-fade-in max-h-60 overflow-y-auto">
-                {options[key].length === 0 ? (
-                  <div className="col-span-2 text-center text-gray-500 py-4">
-                    No hay opciones disponibles
-                  </div>
-                ) : (
-                  options[key].map((option) => (
-                    <label key={option} className="flex items-center gap-2 cursor-pointer select-none text-gray-700 hover:bg-blue-50 rounded px-2 py-1 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={filters[key].includes(option)}
-                        onChange={() => handleMulti(key, option)}
-                        className="hidden"
-                      />
-                      <span className={`w-5 h-5 flex items-center justify-center border-2 rounded transition-colors ${
-                        filters[key].includes(option) ? "border-blue-500 bg-blue-500" : "border-gray-300 bg-white"
-                      }`}>
-                        {filters[key].includes(option) && <CheckIcon className="w-4 h-4 text-white" />}
-                      </span>
-                      <span className="truncate text-sm">{option}</span>
-                    </label>
-                  ))
-                )}
-              </div>
-            )}
+    <div ref={ref} className="relative w-full flex flex-wrap gap-2 md:gap-3 items-center bg-slate-800/95 backdrop-blur-sm rounded-xl shadow-lg px-4 py-4 z-10">
+      {/* Filtro por Letra */}
+      <div className="relative flex-shrink-0">
+        <button
+          type="button"
+          className={`flex items-center justify-between min-w-[120px] max-w-[160px] px-3 py-2 bg-white border border-slate-200 rounded-lg shadow-sm text-gray-700 font-medium transition-all duration-200 focus:outline-none hover:border-slate-300 hover:shadow-md ${
+            dropdown === "letra" ? "ring-2 ring-blue-300 border-blue-300" : ""
+          }`}
+          onClick={() => setDropdown(dropdown === "letra" ? null : "letra")}
+        >
+          <span className="text-gray-400 text-xs mr-2">{labelMap.letra}:</span>
+          <span className={`truncate flex-1 text-left text-xs ${
+            filters.letra ? "text-blue-600 font-semibold" : "text-gray-500"
+          }`}>
+            {filters.letra || "Seleccionar"}
+          </span>
+          <ChevronDownIcon className="w-4 h-4 ml-1 text-gray-400 flex-shrink-0" />
+          {filters.letra && (
+            <XMarkIcon 
+              className="w-3 h-3 ml-1 text-gray-400 hover:text-red-500 cursor-pointer flex-shrink-0 transition-colors" 
+              onClick={(e) => {
+                e.stopPropagation(); 
+                clearLetter();
+              }} 
+            />
+          )}
+        </button>
+        {dropdown === "letra" && (
+          <div className="absolute left-0 z-[9999] mt-2 w-48 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
+            <div className="sticky top-0 bg-slate-900 border-b border-slate-700 p-2">
+              <button
+                onClick={() => handleLetter("Seleccionar")}
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                  !filters.letra ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800"
+                }`}
+              >
+                Seleccionar
+              </button>
+            </div>
+            <div className="p-2 space-y-1">
+              {LETTER_OPTIONS.slice(1).map((letter) => (
+                <button
+                  key={letter}
+                  onClick={() => handleLetter(letter)}
+                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                    filters.letra === letter ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800"
+                  }`}
+                >
+                  {letter}
+                </button>
+              ))}
+            </div>
           </div>
-        ))}
-        
-        {/* Orden */}
-        <div className="relative flex-shrink-0">
+        )}
+      </div>
+
+      {/* Filtros multiselección */}
+      {(["genero", "año", "categoria", "estado"] as FilterKey[]).map((key) => (
+        <div key={key} className="relative flex-shrink-0">
           <button
             type="button"
-            className={`flex items-center justify-between min-w-[140px] max-w-[180px] px-3 py-2 bg-white border border-gray-200 rounded-lg shadow-sm text-gray-700 font-medium transition-all duration-200 focus:outline-none hover:border-gray-300 hover:shadow-md ${
-              dropdown === "orden" ? "ring-2 ring-blue-300 border-blue-300" : ""
+            className={`flex items-center justify-between min-w-[140px] max-w-[180px] px-3 py-2 bg-white border border-slate-200 rounded-lg shadow-sm text-gray-700 font-medium transition-all duration-200 focus:outline-none hover:border-slate-300 hover:shadow-md ${
+              dropdown === key ? "ring-2 ring-blue-300 border-blue-300" : ""
             }`}
-            onClick={() => setDropdown(dropdown === "orden" ? null : "orden")}
+            onClick={() => setDropdown(dropdown === key ? null : key)}
           >
-            <span className="text-gray-400 text-xs mr-2">Orden:</span>
-            <span className="truncate flex-1 text-left text-blue-600 font-semibold text-xs">
-              {filters.orden === "Por Defecto" ? "Defecto" : filters.orden.split(" ")[0]}
+            <span className="text-gray-400 text-xs mr-2">{labelMap[key]}:</span>
+            <span className={`truncate flex-1 text-left text-xs ${
+              filters[key].length ? "text-blue-600 font-semibold" : "text-gray-500"
+            }`}>
+              {filters[key].length === 0 ? "Todos" : `${filters[key].length} seleccionados`}
             </span>
             <ChevronDownIcon className="w-4 h-4 ml-1 text-gray-400 flex-shrink-0" />
+            {filters[key].length > 0 && (
+              <XMarkIcon 
+                className="w-3 h-3 ml-1 text-gray-400 hover:text-red-500 cursor-pointer flex-shrink-0 transition-colors" 
+                onClick={(e) => {
+                  e.stopPropagation(); 
+                  clearFilter(key);
+                }} 
+              />
+            )}
           </button>
-          {dropdown === "orden" && (
-            <div className="absolute left-0 z-20 mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-lg p-4 animate-fade-in">
-              {ORDER_OPTIONS.map((option) => (
-                <label key={option} className="flex items-center gap-2 cursor-pointer select-none text-gray-700 hover:bg-blue-50 rounded px-2 py-1 transition-colors">
-                  <input
-                    type="radio"
-                    name="orden"
-                    checked={filters.orden === option}
-                    onChange={() => handleRadio(option)}
-                    className="hidden"
-                  />
-                  <span className={`w-5 h-5 flex items-center justify-center border-2 rounded-full transition-colors ${
-                    filters.orden === option ? "border-blue-500 bg-blue-500" : "border-gray-300 bg-white"
-                  }`}>
-                    {filters.orden === option && <CheckIcon className="w-4 h-4 text-white" />}
-                  </span>
-                  <span className="truncate text-sm">{option}</span>
-                </label>
-              ))}
+          {dropdown === key && (
+            <div className="absolute left-0 z-[9999] mt-2 w-64 bg-slate-100 border border-slate-200 rounded-xl shadow-2xl p-4 grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+              {options[key].length === 0 ? (
+                <div className="col-span-2 text-center text-slate-500 py-4">
+                  No hay opciones disponibles
+                </div>
+              ) : (
+                options[key].map((option) => (
+                  <label key={option} className="flex items-center gap-2 cursor-pointer select-none text-slate-700 hover:bg-blue-50 rounded px-2 py-1 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={filters[key].includes(option)}
+                      onChange={() => handleMulti(key, option)}
+                      className="hidden"
+                    />
+                    <span className={`w-5 h-5 flex items-center justify-center border-2 rounded transition-colors ${
+                      filters[key].includes(option) ? "border-blue-500 bg-blue-500" : "border-slate-300 bg-white"
+                    }`}>
+                      {filters[key].includes(option) && <CheckIcon className="w-4 h-4 text-white" />}
+                    </span>
+                    <span className="truncate text-sm">{option}</span>
+                  </label>
+                ))
+              )}
             </div>
           )}
         </div>
-      </div>
+      ))}
       
-      {/* Botón Filtrar */}
-      <button
-        type="button"
-        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-lg shadow-lg transition-all duration-200 text-sm flex-shrink-0 border border-indigo-700 hover:shadow-xl transform hover:scale-105"
-        onClick={handleApply}
-      >
-        <FunnelIcon className="w-4 h-4" />
-        FILTRAR
-      </button>
+      {/* Orden */}
+      <div className="relative flex-shrink-0">
+        <button
+          type="button"
+          className={`flex items-center justify-between min-w-[140px] max-w-[180px] px-3 py-2 bg-white border border-slate-200 rounded-lg shadow-sm text-gray-700 font-medium transition-all duration-200 focus:outline-none hover:border-slate-300 hover:shadow-md ${
+            dropdown === "orden" ? "ring-2 ring-blue-300 border-blue-300" : ""
+          }`}
+          onClick={() => setDropdown(dropdown === "orden" ? null : "orden")}
+        >
+          <span className="text-gray-400 text-xs mr-2">Orden:</span>
+          <span className="truncate flex-1 text-left text-blue-600 font-semibold text-xs">
+            {filters.orden === "Por Defecto" ? "Defecto" : filters.orden.split(" ")[0]}
+          </span>
+          <ChevronDownIcon className="w-4 h-4 ml-1 text-gray-400 flex-shrink-0" />
+        </button>
+        {dropdown === "orden" && (
+          <div className="absolute left-0 z-[9999] mt-2 w-64 bg-slate-100 border border-slate-200 rounded-xl shadow-2xl p-4">
+            {ORDER_OPTIONS.map((option) => (
+              <label key={option} className="flex items-center gap-2 cursor-pointer select-none text-slate-700 hover:bg-blue-50 rounded px-2 py-1 transition-colors">
+                <input
+                  type="radio"
+                  name="orden"
+                  checked={filters.orden === option}
+                  onChange={() => handleRadio(option)}
+                  className="hidden"
+                />
+                <span className={`w-5 h-5 flex items-center justify-center border-2 rounded-full transition-colors ${
+                  filters.orden === option ? "border-blue-500 bg-blue-500" : "border-slate-300 bg-white"
+                }`}>
+                  {filters.orden === option && <CheckIcon className="w-4 h-4 text-white" />}
+                </span>
+                <span className="truncate text-sm">{option}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
