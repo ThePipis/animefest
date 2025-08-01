@@ -166,6 +166,36 @@ export const AnimeDetail: React.FC = () => {
     }
   }, [id, isAuthenticated, fetchAnime, checkFavoriteStatus]);
 
+  // Nuevo useEffect para scroll automático al cargar la página
+  useEffect(() => {
+    if (anime && !loading) {
+      // Esperar un poco para que el DOM se renderice completamente
+      const timer = setTimeout(() => {
+        // Buscar el elemento del título del anime
+        const titleSection = document.querySelector('h1');
+        if (titleSection) {
+          // Calcular la posición considerando el botón de favoritos que está arriba
+          const favoriteButton = document.querySelector('button[disabled]') || document.querySelector('button');
+          let scrollPosition = titleSection.offsetTop;
+          
+          // Si hay botón de favoritos, ajustar la posición para incluirlo en la vista
+          if (favoriteButton && favoriteButton.closest('.card')) {
+            const card = favoriteButton.closest('.card') as HTMLElement;
+            scrollPosition = Math.max(0, card.offsetTop - 20); // 20px de margen superior
+          }
+          
+          // Hacer scroll suave a la posición calculada
+          window.scrollTo({
+            top: scrollPosition,
+            behavior: 'smooth'
+          });
+        }
+      }, 500); // Esperar 500ms para que las animaciones terminen
+      
+      return () => clearTimeout(timer);
+    }
+  }, [anime, loading]); // Se ejecuta cuando el anime se carga
+
   const toggleFavorite = async () => {
     if (!isAuthenticated || !anime) return;
     
