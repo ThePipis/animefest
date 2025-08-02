@@ -12,6 +12,8 @@ import path from "path";
 
 import { fileURLToPath } from "url";
 
+import { resolveVideoStream } from './videoResolver.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -154,149 +156,132 @@ app.get("/anime/:id", async (req, res) => {
   }
 });
 
-// GET /reproducir - Obtener URL de stream
-app.get("/reproducir", async (req, res) => {
+// GET /reproducir - Endpoint mejorado con scraping automático
+app.get("/reproducir", authenticateToken, async (req, res) => {
   try {
-    const { animeId, episodio } = req.query;
+    const { id, episodio } = req.query;
 
-    if (!animeId || !episodio) {
-      return res
-        .status(400)
-        .json({ error: "animeId y episodio son requeridos" });
+    // Validar parámetros
+    if (!id || !episodio) {
+      return res.status(400).json({ 
+        error: "Los parámetros 'id' y 'episodio' son requeridos" 
+      });
     }
 
+    console.log(`🎬 Solicitud de reproducción - Anime ID: ${id}, Episodio: ${episodio}`);
+
+    // Buscar anime en la base de datos
     const animes = await readJsonFile("animes.json");
-    const anime = animes.find((a) => a.id === parseInt(animeId));
+    const anime = animes.find((a) => a.id === parseInt(id));
 
     if (!anime) {
       return res.status(404).json({ error: "Anime no encontrado" });
     }
 
+    // Buscar episodio específico
     const ep = anime.episodios.find((e) => e.numero === parseInt(episodio));
 
     if (!ep) {
       return res.status(404).json({ error: "Episodio no encontrado" });
     }
 
-    res.json({
-      url: ep.url_stream,
-      titulo: ep.titulo,
-      anime: anime.titulo,
-      episodio: ep.numero,
-    });
+    // Verificar que el url_stream sea válido
+    if (!ep.url_stream || !ep.url_stream.includes('latanime.org')) {
+      return res.status(400).json({ 
+        error: "URL de episodio no válida o no soportada" 
+      });
+    }
+
+    try {
+      // Resolver el stream de video usando puppeteer
+      console.log(`🔍 Resolviendo stream para: ${ep.url_stream}`);
+      
+      const videoData = await resolveVideoStream(ep.url_stream);
+      
+      // Registrar en historial del usuario
+      await registrarHistorial(req.user.id, {
+        animeId: anime.id,
+        episodio: ep.numero,
+        fechaVisto: new Date().toISOString(),
+        animeTitle: anime.titulo,
+        animeImage: anime.imagen,
+        progreso: 0
+      });
+
+      // Respuesta exitosa
+      res.json({
+        success: true,
+        data: {
+          ...videoData,
+          titulo: ep.titulo,
+          anime: anime.titulo,
+          episodio: ep.numero,
+          duracion: ep.duracion,
+          imagen: anime.imagen
+        }
+      });
+
+      console.log(`✅ Stream resuelto exitosamente para ${anime.titulo} - Episodio ${ep.numero}`);
+      
+    } catch (resolverError) {
+      console.error(`🚨 Error resolviendo stream:`, resolverError.message);
+      
+      // Fallback: devolver URL original si el scraping falla
+      res.json({
+        success: false,
+        fallback: true,
+        data: {
+          servidor: "Original",
+          url: ep.url_stream,
+          tipo: "webpage",
+          titulo: ep.titulo,
+          anime: anime.titulo,
+          episodio: ep.numero,
+          duracion: ep.duracion,
+          imagen: anime.imagen
+        },
+        error: "No se pudo resolver automáticamente, usando enlace original"
+      });
+    }
+
   } catch (error) {
-    res.status(500).json({ error: "Error al obtener el stream" });
+    console.error('🚨 Error en endpoint /reproducir:', error);
+    res.status(500).json({ 
+      error: "Error interno del servidor",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
-// POST /login - Autenticación de usuario
-app.post("/login", async (req, res) => {
+// Función auxiliar para registrar historial
+async function registrarHistorial(userId, data) {
   try {
-    console.log("Login request received:", req.body);
-    const { username, password } = req.body;
-
-    if (!username || !password) {
-      console.log("Missing username or password");
-      return res
-        .status(400)
-        .json({ error: "Username y password son requeridos" });
+    const usuarios = await readJsonFile("users.json");
+    const usuario = usuarios.find(u => u.id === userId);
+    
+    if (usuario) {
+      if (!usuario.historial) usuario.historial = [];
+      
+      // Evitar duplicados del mismo episodio
+      const existingIndex = usuario.historial.findIndex(
+        h => h.animeId === data.animeId && h.episodio === data.episodio
+      );
+      
+      if (existingIndex >= 0) {
+        usuario.historial[existingIndex] = { ...usuario.historial[existingIndex], ...data };
+      } else {
+        usuario.historial.unshift(data);
+      }
+      
+      // Mantener solo los últimos 50 elementos
+      usuario.historial = usuario.historial.slice(0, 50);
+      
+      await writeJsonFile("users.json", usuarios);
     }
-
-    const users = await readJsonFile("users.json");
-    console.log("Users loaded:", users.length);
-    const user = users.find((u) => u.username === username);
-    console.log("User found:", user ? "Yes" : "No");
-
-    if (!user) {
-      console.log("User not found");
-      return res.status(401).json({ error: "Credenciales inválidas" });
-    }
-
-    const validPassword = await bcrypt.compare(password, user.password);
-    console.log("Password valid:", validPassword);
-
-    if (!validPassword) {
-      console.log("Invalid password");
-      return res.status(401).json({ error: "Credenciales inválidas" });
-    }
-
-    const token = jwt.sign(
-      { id: user.id, username: user.username },
-      JWT_SECRET,
-      { expiresIn: "24h" }
-    );
-
-    console.log("Login successful, sending response");
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-      },
-    });
   } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ error: "Error en el login" });
+    console.error('Error registrando historial:', error);
   }
-});
-
-// POST /registro - Registro de nuevo usuario
-app.post("/registro", async (req, res) => {
-  try {
-    const { username, email, password } = req.body;
-
-    if (!username || !email || !password) {
-      return res.status(400).json({ error: "Todos los campos son requeridos" });
-    }
-
-    const users = await readJsonFile("users.json");
-
-    // Verificar si el usuario ya existe
-    const existingUser = users.find(
-      (u) => u.username === username || u.email === email
-    );
-
-    if (existingUser) {
-      return res.status(409).json({ error: "Usuario o email ya existe" });
-    }
-
-    // Hash de la contraseña
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Crear nuevo usuario
-    const newUser = {
-      id: users.length + 1,
-      username,
-      email,
-      password: hashedPassword,
-      favoritos: [],
-      historial: [],
-    };
-
-    users.push(newUser);
-    await writeJsonFile("users.json", users);
-
-    const token = jwt.sign(
-      { id: newUser.id, username: newUser.username },
-      JWT_SECRET,
-      { expiresIn: "24h" }
-    );
-
-    res.status(201).json({
-      token,
-      user: {
-        id: newUser.id,
-        username: newUser.username,
-        email: newUser.email,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Error en el registro" });
-  }
-});
-
-// Rutas protegidas (requieren autenticación)
+}
 
 // GET /usuario - Datos del usuario actual
 app.get("/usuario", authenticateToken, async (req, res) => {

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import { SearchInput } from '../components/SearchInput';
 import SearchFilters from '../components/SearchFilters';
+import { TestPlayer } from '../components/TestPlayer';
 
 interface Anime {
   id: number;
@@ -164,7 +165,8 @@ export const Catalogo: React.FC = () => {
   const handleAnimeClick = (animeId: number) => {
     navigate(`/anime/${animeId}`);
   };
-
+  // ⬇️ Aquí insertas el TestPlayer
+  <TestPlayer />
   return (
     <div className="min-h-screen bg-dark-900 p-8">
       <div className="max-w-7xl mx-auto">

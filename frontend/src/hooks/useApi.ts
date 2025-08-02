@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
 import { useAuthStore } from '../stores/authStore';
+import type { User } from '../types/types';
 
 const API_BASE_URL = 'http://localhost:3001';
 
@@ -45,6 +46,17 @@ class ApiClient {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`HTTP Error ${response.status}:`, errorText);
+
+        // ✅ Detectar token expirado
+        if (response.status === 403 && errorText.includes('Token inválido')) {
+          localStorage.removeItem('token');
+          window.location.href = '/login?expired=true'; // Redirige con mensaje
+          return {
+            error: 'Token expirado',
+            status: 403,
+          };
+        }
+
         return {
           error: `Error ${response.status}: ${errorText}`,
           status: response.status,
@@ -113,11 +125,10 @@ export const useApi = () => {
 
     // Autenticación
     login: (username: string, password: string) =>
-      apiClient.post('/login', { username, password }),
+      apiClient.post<{ token: string; user: User }>('/login', { username, password }),
 
     register: (username: string, email: string, password: string) =>
-      apiClient.post('/registro', { username, email, password }),
-
+      apiClient.post<{ token: string; user: User }>('/registro', { username, email, password }),
     // Usuario
     getUser: () => apiClient.get('/usuario'),
 

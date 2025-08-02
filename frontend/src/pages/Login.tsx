@@ -2,14 +2,17 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom'; // ✅ Remover useNavigate
 import { motion } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
+import { useLocation } from 'react-router-dom';
 
 export const Login: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const expired = params.get('expired') === 'true';
   // ✅ Remover esta línea: const navigate = useNavigate();
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -28,7 +31,7 @@ export const Login: React.FC = () => {
       setIsLoading(false);
     }
   };
-
+  
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
       <motion.div
@@ -44,6 +47,11 @@ export const Login: React.FC = () => {
         </div>
 
         <form onSubmit={handleSubmit}>
+          {expired && (
+            <div className="bg-yellow-100 text-yellow-800 text-sm p-3 rounded mb-4 text-center">
+              ⚠️ Tu sesión ha expirado. Por favor, inicia sesión nuevamente.
+            </div>
+          )}
           <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-8 space-y-6">
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-slate-300 mb-2">
