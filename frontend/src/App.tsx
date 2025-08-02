@@ -7,6 +7,7 @@ import { Register } from './pages/Register';
 import { Catalogo } from './pages/Catalogo';
 import { AnimeDetail } from './pages/AnimeDetail';
 import { Watch } from './pages/Watch';
+import { Episodio } from './pages/Episodio';
 import { Favoritos } from './pages/Favoritos';
 import { Historial } from './pages/Historial';
 import { useAuthStore } from './stores/authStore';
@@ -51,6 +52,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <Watch />
+              </ProtectedRoute>
+            }
+          />
+          {/* Nueva ruta para episodios */}
+          <Route
+            path="/episodio/:animeId/:episodio"
+            element={
+              <ProtectedRoute>
+                <Episodio />
               </ProtectedRoute>
             }
           />

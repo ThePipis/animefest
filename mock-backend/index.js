@@ -14,6 +14,10 @@ import { fileURLToPath } from "url";
 
 import { resolveVideoStream } from './videoResolver.js';
 
+import axios from 'axios';
+
+import * as cheerio from 'cheerio';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -71,7 +75,7 @@ const writeJsonFile = async (filename, data) => {
 // Middleware de autenticación
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
+  const token = authHeader && authHeader.split(" ")[1]; // ✅ Extrae token después de "Bearer "
 
   if (!token) {
     return res.status(401).json({ error: "Token de acceso requerido" });
@@ -252,6 +256,282 @@ app.get("/reproducir", authenticateToken, async (req, res) => {
     });
   }
 });
+
+// GET /episodios/:animeId/:episodio - Nuevo endpoint para obtener stream de episodio específico
+app.get("/episodios/:animeId/:episodio", authenticateToken, async (req, res) => {
+  try {
+    const { animeId, episodio } = req.params;
+
+    // Validar parámetros
+    if (!animeId || !episodio) {
+      return res.status(400).json({ 
+        error: "Los parámetros 'animeId' y 'episodio' son requeridos" 
+      });
+    }
+
+    console.log(`🎬 Solicitud de episodio - Anime ID: ${animeId}, Episodio: ${episodio}`);
+
+    // Buscar anime en la base de datos
+    const animes = await readJsonFile("animes.json");
+    const anime = animes.find((a) => a.id === parseInt(animeId));
+
+    if (!anime) {
+      return res.status(404).json({ error: "Anime no encontrado" });
+    }
+
+    // Buscar episodio específico
+    const ep = anime.episodios.find((e) => e.numero === parseInt(episodio));
+
+    if (!ep) {
+      return res.status(404).json({ error: "Episodio no encontrado" });
+    }
+
+    // Verificar que el url_stream sea válido
+    if (!ep.url_stream || !ep.url_stream.includes('latanime.org')) {
+      return res.status(400).json({ 
+        error: "URL de episodio no válida o no soportada" 
+      });
+    }
+
+    try {
+      // Resolver el stream de video usando puppeteer
+      console.log(`🔍 Resolviendo stream para: ${ep.url_stream}`);
+      
+      const videoData = await resolveVideoStream(ep.url_stream);
+      
+      // Registrar en historial del usuario
+      await registrarHistorial(req.user.id, {
+        animeId: anime.id,
+        episodio: ep.numero,
+        fechaVisto: new Date().toISOString(),
+        animeTitle: anime.titulo,
+        animeImage: anime.imagen,
+        progreso: 0
+      });
+
+      // Respuesta exitosa
+      res.json({
+        success: true,
+        data: {
+          ...videoData,
+          titulo: ep.titulo,
+          anime: anime.titulo,
+          episodio: ep.numero,
+          duracion: ep.duracion,
+          imagen: anime.imagen
+        }
+      });
+
+      console.log(`✅ Stream resuelto exitosamente para ${anime.titulo} - Episodio ${ep.numero}`);
+      
+    } catch (resolverError) {
+      console.error(`🚨 Error resolviendo stream:`, resolverError.message);
+      
+      // Fallback: devolver URL original si el scraping falla
+      res.json({
+        success: false,
+        fallback: true,
+        data: {
+          servidor: "Original",
+          url: ep.url_stream,
+          tipo: "webpage",
+          titulo: ep.titulo,
+          anime: anime.titulo,
+          episodio: ep.numero,
+          duracion: ep.duracion,
+          imagen: anime.imagen
+        },
+        error: "No se pudo resolver automáticamente, usando enlace original"
+      });
+    }
+
+  } catch (error) {
+    console.error('🚨 Error en endpoint /episodios:', error);
+    res.status(500).json({ 
+      error: "Error interno del servidor",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /reproductor/:animeId/:episodio - Nuevo endpoint para obtener servidores con fallback
+app.get("/reproductor/:animeId/:episodio", authenticateToken, async (req, res) => {
+  try {
+    const { animeId, episodio } = req.params;
+
+    // Validar parámetros
+    if (!animeId || !episodio) {
+      return res.status(400).json({ 
+        error: "Los parámetros 'animeId' y 'episodio' son requeridos" 
+      });
+    }
+
+    console.log(`🎬 Solicitud de servidores - Anime ID: ${animeId}, Episodio: ${episodio}`);
+
+    // Buscar anime en la base de datos
+    const animes = await readJsonFile("animes.json");
+    const anime = animes.find((a) => a.id === parseInt(animeId));
+
+    if (!anime) {
+      return res.status(404).json({ error: "Anime no encontrado" });
+    }
+
+    // Buscar episodio específico
+    const ep = anime.episodios.find((e) => e.numero === parseInt(episodio));
+
+    if (!ep) {
+      return res.status(404).json({ error: "Episodio no encontrado" });
+    }
+
+    // Verificar que el url_stream sea válido
+    if (!ep.url_stream || !ep.url_stream.includes('latanime.org')) {
+      return res.status(400).json({ 
+        error: "URL de episodio no válida o no soportada" 
+      });
+    }
+
+    try {
+      // Hacer scraping de la página de latanime.org
+      console.log(`🔍 Haciendo scraping de: ${ep.url_stream}`);
+      
+      const response = await axios.get(ep.url_stream, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        },
+        timeout: 10000
+      });
+
+      const $ = cheerio.load(response.data);
+      const servidores = [];
+
+      // Extraer iframes de los diferentes servidores
+      const serverPatterns = {
+        'doodstream': /dood\.(la|to|ws|sh|pm|re|wf|cx|watch)/i,
+        'yourupload': /yourupload\.com/i,
+        'mp4upload': /mp4upload\.com/i,
+        'ok': /ok\.ru/i
+      };
+
+      // Buscar todos los iframes en la página
+      $('iframe').each((index, element) => {
+        const src = $(element).attr('src');
+        if (src) {
+          // Determinar el tipo de servidor
+          for (const [serverName, pattern] of Object.entries(serverPatterns)) {
+            if (pattern.test(src)) {
+              servidores.push({
+                nombre: serverName,
+                iframe: src.startsWith('//') ? `https:${src}` : src,
+                prioridad: getPrioridad(serverName)
+              });
+              break;
+            }
+          }
+        }
+      });
+
+      // Buscar también en enlaces que pueden contener URLs de servidores
+      $('a[href]').each((index, element) => {
+        const href = $(element).attr('href');
+        if (href) {
+          for (const [serverName, pattern] of Object.entries(serverPatterns)) {
+            if (pattern.test(href)) {
+              // Verificar si ya existe este servidor
+              const exists = servidores.some(s => s.nombre === serverName);
+              if (!exists) {
+                servidores.push({
+                  nombre: serverName,
+                  iframe: href.startsWith('//') ? `https:${href}` : href,
+                  prioridad: getPrioridad(serverName)
+                });
+              }
+              break;
+            }
+          }
+        }
+      });
+
+      // Ordenar por prioridad
+      servidores.sort((a, b) => a.prioridad - b.prioridad);
+
+      // Registrar en historial del usuario
+      await registrarHistorial(req.user.id, {
+        animeId: anime.id,
+        episodio: ep.numero,
+        fechaVisto: new Date().toISOString(),
+        animeTitle: anime.titulo,
+        animeImage: anime.imagen,
+        progreso: 0
+      });
+
+      // Respuesta exitosa
+      res.json({
+        success: true,
+        anime: {
+          id: anime.id,
+          titulo: anime.titulo,
+          imagen: anime.imagen
+        },
+        episodio: {
+          numero: ep.numero,
+          titulo: ep.titulo,
+          duracion: ep.duracion
+        },
+        servidores: servidores.length > 0 ? servidores : [{
+          nombre: "original",
+          iframe: ep.url_stream,
+          prioridad: 999
+        }]
+      });
+
+      console.log(`✅ Servidores encontrados: ${servidores.length}`);
+      
+    } catch (scrapingError) {
+      console.error(`🚨 Error haciendo scraping:`, scrapingError.message);
+      
+      // Fallback: devolver URL original
+      res.json({
+        success: false,
+        fallback: true,
+        anime: {
+          id: anime.id,
+          titulo: anime.titulo,
+          imagen: anime.imagen
+        },
+        episodio: {
+          numero: ep.numero,
+          titulo: ep.titulo,
+          duracion: ep.duracion
+        },
+        servidores: [{
+          nombre: "original",
+          iframe: ep.url_stream,
+          prioridad: 999
+        }],
+        error: "No se pudo extraer servidores, usando enlace original"
+      });
+    }
+
+  } catch (error) {
+    console.error('🚨 Error en endpoint /reproductor:', error);
+    res.status(500).json({ 
+      error: "Error interno del servidor",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Función auxiliar para determinar prioridad de servidores
+function getPrioridad(serverName) {
+  const prioridades = {
+    'doodstream': 1,
+    'yourupload': 2,
+    'mp4upload': 3,
+    'ok': 4,
+    'original': 999
+  };
+  return prioridades[serverName] || 999;
+}
 
 // Función auxiliar para registrar historial
 async function registrarHistorial(userId, data) {

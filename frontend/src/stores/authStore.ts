@@ -23,6 +23,7 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       isAuthenticated: false,
       login: (token: string, user: User) => {
+        // ✅ Esto automáticamente guarda en localStorage bajo 'auth-storage'
         set({
           token,
           user,
@@ -41,7 +42,7 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: 'auth-storage',
+      name: 'auth-storage', // ✅ Clave en localStorage
       partialize: (state) => ({
         token: state.token,
         user: state.user,

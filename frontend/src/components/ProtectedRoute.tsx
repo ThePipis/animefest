@@ -6,11 +6,12 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, token } = useAuthStore();
   const location = useLocation();
 
-  if (!isAuthenticated) {
-    // Guardar la ubicación a la que el usuario intentaba acceder
+  // ✅ Verificación más estricta
+  if (!isAuthenticated || !token) {
+    console.warn('🚫 Acceso denegado: Usuario no autenticado');
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

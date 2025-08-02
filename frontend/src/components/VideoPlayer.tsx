@@ -21,7 +21,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !src) return;
+    
+    // ✅ Verificación adicional de seguridad
+    if (!video || !src) {
+      console.warn('⚠️ VideoPlayer: Video element o src no disponible');
+      return;
+    }
+
+    // ✅ Verificar que el elemento esté montado en el DOM
+    if (!video.isConnected) {
+      console.warn('⚠️ VideoPlayer: Elemento no está conectado al DOM');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -94,7 +105,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         hlsRef.current.destroy();
       }
     };
-  }, [src, tipo, onTimeUpdate]);
+  }, [src, tipo]);
+
+  // ✅ Renderizado condicional para evitar errores
+  if (!src) {
+    return (
+      <div className="bg-dark-800 rounded-lg p-8 text-center">
+        <div className="text-yellow-400 text-4xl mb-4">⚠️</div>
+        <h3 className="text-white text-lg mb-2">No hay fuente de video</h3>
+        <p className="text-dark-400">Esperando datos del episodio...</p>
+      </div>
+    );
+  }
 
   if (error) {
     return (

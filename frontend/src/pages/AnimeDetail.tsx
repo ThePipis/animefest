@@ -498,7 +498,7 @@ export const AnimeDetail: React.FC = () => {
                           <p className="text-dark-400 text-sm">Duración: {episodio.duracion}</p>
                         </div>
                         <Link
-                          to={`/watch/${anime.id}/${episodio.numero}`}
+                          to={`/episodio/${anime.id}/${episodio.numero}`}
                           className="btn-primary ml-4"
                         >
                           ▶️ Ver
