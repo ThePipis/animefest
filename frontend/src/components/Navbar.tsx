@@ -50,6 +50,15 @@ export const Navbar: React.FC = () => {
               >
                 Historial
               </Link>
+              
+              {/* Nuevo enlace de administración */}
+              <Link
+                to="/admin/animes"
+                className="text-slate-300 hover:text-white transition-all duration-200 px-4 py-2.5 rounded-xl hover:bg-slate-800/50 font-medium flex items-center space-x-1"
+              >
+                <span>🎬</span>
+                <span>Admin</span>
+              </Link>
 
               <div className="flex items-center space-x-3">
                 <span className="text-slate-300 hidden sm:block">
@@ -106,6 +115,15 @@ export const Navbar: React.FC = () => {
                 className="text-slate-300 hover:text-white transition-colors duration-200 text-sm px-2 py-1 rounded hover:bg-slate-700"
               >
                 Historial
+
+              </Link>
+              {/* Agregar enlace de admin en móvil */}
+              <Link
+                to="/admin/animes"
+                className="text-slate-300 hover:text-white transition-colors duration-200 text-sm px-2 py-1 rounded hover:bg-slate-700 flex items-center space-x-1"
+              >
+                <span>🎬</span>
+                <span>Admin Animes</span>
               </Link>
             </div>
           </div>

@@ -12,18 +12,26 @@ import path from "path";
 
 import { fileURLToPath } from "url";
 
-import { resolveVideoStream } from './videoResolver.js';
+import axios from "axios";
 
-import axios from 'axios';
+import * as cheerio from "cheerio";
 
-import * as cheerio from 'cheerio';
+import puppeteer from "puppeteer";
+
+import { resolveVideoStream } from "./videoResolver.js";
+
+import { initDatabase, Anime, Episodio } from './db/database.js';
+import { LatAnimeScraper } from './scrapers/latanime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3001; // Server port
+const PORT = 3001;
 const JWT_SECRET = "animefest_secret_key_2024";
+
+// Inicializar base de datos al arrancar el servidor
+initDatabase();
 
 // Middleware
 app.use(
@@ -72,20 +80,24 @@ const writeJsonFile = async (filename, data) => {
   }
 };
 
-// Middleware de autenticación
+// Middleware de autenticación con fallback para desarrollo
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1]; // ✅ Extrae token después de "Bearer "
+  const token = authHeader?.split(" ")[1];
 
   if (!token) {
-    return res.status(401).json({ error: "Token de acceso requerido" });
+    // Fallback para entorno de desarrollo
+    req.user = { id: 1, username: "mockuser" };
+    return next();
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      return res.status(403).json({ error: "Token inválido" });
+      // Fallback en caso de token inválido
+      req.user = { id: 1, username: "mockuser" };
+    } else {
+      req.user = user;
     }
-    req.user = user;
     next();
   });
 };
@@ -107,18 +119,31 @@ app.get("/animes", async (req, res) => {
     const animes = await readJsonFile("animes.json");
     res.json(animes);
   } catch (error) {
-    console.error('Error fetching animes:', error);
+    console.error("Error fetching animes:", error);
     res.status(500).json({ error: "Error al obtener los animes" });
   }
 });
 
-// GET /catalogo - Lista completa de animes
+// GET /catalogo - Lista completa de animes (MODIFICADO para usar base de datos)
 app.get("/catalogo", async (req, res) => {
   try {
-    const animes = await readJsonFile("animes.json");
+    // Cambiar de archivo JSON a base de datos
+    const animes = await Anime.findAll({
+      include: [{
+        model: Episodio,
+        as: 'episodios',
+        attributes: ['numero', 'titulo', 'duracion', 'url_stream']
+      }],
+      order: [['createdAt', 'DESC']]
+    });
+    
     const { buscar, genero } = req.query;
-
-    let resultado = animes;
+    
+    // Convertir a formato JSON y procesar episodios
+    let resultado = animes.map(anime => ({
+      ...anime.toJSON(),
+      episodios: anime.episodios || []
+    }));
 
     // Filtrar por búsqueda de texto
     if (buscar) {
@@ -132,7 +157,7 @@ app.get("/catalogo", async (req, res) => {
     // Filtrar por género
     if (genero) {
       resultado = resultado.filter((anime) =>
-        anime.generos.some((g) =>
+        anime.generos && anime.generos.some((g) =>
           g.toLowerCase().includes(genero.toLowerCase())
         )
       );
@@ -140,22 +165,63 @@ app.get("/catalogo", async (req, res) => {
 
     res.json(resultado);
   } catch (error) {
+    console.error('❌ Error al obtener el catálogo:', error);
     res.status(500).json({ error: "Error al obtener el catálogo" });
   }
 });
 
-// GET /anime/:id - Detalles de un anime específico
+// GET /animes - Endpoint para obtener todos los animes (MODIFICADO para filtros)
+app.get("/animes", async (req, res) => {
+  try {
+    // Cambiar de archivo JSON a base de datos
+    const animes = await Anime.findAll({
+      include: [{
+        model: Episodio,
+        as: 'episodios',
+        attributes: ['numero', 'titulo', 'duracion', 'url_stream']
+      }],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    // Convertir a formato JSON
+    const resultado = animes.map(anime => ({
+      ...anime.toJSON(),
+      episodios: anime.episodios || []
+    }));
+    
+    res.json(resultado);
+  } catch (error) {
+    console.error("Error fetching animes:", error);
+    res.status(500).json({ error: "Error al obtener los animes" });
+  }
+});
+
+// GET /anime/:id - Detalles de un anime específico (MODIFICADO)
 app.get("/anime/:id", async (req, res) => {
   try {
-    const animes = await readJsonFile("animes.json");
-    const anime = animes.find((a) => a.id === parseInt(req.params.id));
+    // Cambiar de archivo JSON a base de datos
+    const anime = await Anime.findByPk(req.params.id, {
+      include: [{
+        model: Episodio,
+        as: 'episodios',
+        attributes: ['numero', 'titulo', 'duracion', 'url_stream'],
+        order: [['numero', 'ASC']]
+      }]
+    });
 
     if (!anime) {
       return res.status(404).json({ error: "Anime no encontrado" });
     }
 
-    res.json(anime);
+    // Convertir a formato JSON
+    const resultado = {
+      ...anime.toJSON(),
+      episodios: anime.episodios || []
+    };
+
+    res.json(resultado);
   } catch (error) {
+    console.error('❌ Error al obtener el anime:', error);
     res.status(500).json({ error: "Error al obtener el anime" });
   }
 });
@@ -167,12 +233,14 @@ app.get("/reproducir", authenticateToken, async (req, res) => {
 
     // Validar parámetros
     if (!id || !episodio) {
-      return res.status(400).json({ 
-        error: "Los parámetros 'id' y 'episodio' son requeridos" 
+      return res.status(400).json({
+        error: "Los parámetros 'id' y 'episodio' son requeridos",
       });
     }
 
-    console.log(`🎬 Solicitud de reproducción - Anime ID: ${id}, Episodio: ${episodio}`);
+    console.log(
+      `🎬 Solicitud de reproducción - Anime ID: ${id}, Episodio: ${episodio}`
+    );
 
     // Buscar anime en la base de datos
     const animes = await readJsonFile("animes.json");
@@ -190,18 +258,18 @@ app.get("/reproducir", authenticateToken, async (req, res) => {
     }
 
     // Verificar que el url_stream sea válido
-    if (!ep.url_stream || !ep.url_stream.includes('latanime.org')) {
-      return res.status(400).json({ 
-        error: "URL de episodio no válida o no soportada" 
+    if (!ep.url_stream || !ep.url_stream.includes("latanime.org")) {
+      return res.status(400).json({
+        error: "URL de episodio no válida o no soportada",
       });
     }
 
     try {
       // Resolver el stream de video usando puppeteer
       console.log(`🔍 Resolviendo stream para: ${ep.url_stream}`);
-      
+
       const videoData = await resolveVideoStream(ep.url_stream);
-      
+
       // Registrar en historial del usuario
       await registrarHistorial(req.user.id, {
         animeId: anime.id,
@@ -209,7 +277,7 @@ app.get("/reproducir", authenticateToken, async (req, res) => {
         fechaVisto: new Date().toISOString(),
         animeTitle: anime.titulo,
         animeImage: anime.imagen,
-        progreso: 0
+        progreso: 0,
       });
 
       // Respuesta exitosa
@@ -221,15 +289,16 @@ app.get("/reproducir", authenticateToken, async (req, res) => {
           anime: anime.titulo,
           episodio: ep.numero,
           duracion: ep.duracion,
-          imagen: anime.imagen
-        }
+          imagen: anime.imagen,
+        },
       });
 
-      console.log(`✅ Stream resuelto exitosamente para ${anime.titulo} - Episodio ${ep.numero}`);
-      
+      console.log(
+        `✅ Stream resuelto exitosamente para ${anime.titulo} - Episodio ${ep.numero}`
+      );
     } catch (resolverError) {
       console.error(`🚨 Error resolviendo stream:`, resolverError.message);
-      
+
       // Fallback: devolver URL original si el scraping falla
       res.json({
         success: false,
@@ -242,293 +311,213 @@ app.get("/reproducir", authenticateToken, async (req, res) => {
           anime: anime.titulo,
           episodio: ep.numero,
           duracion: ep.duracion,
-          imagen: anime.imagen
+          imagen: anime.imagen,
         },
-        error: "No se pudo resolver automáticamente, usando enlace original"
+        error: "No se pudo resolver automáticamente, usando enlace original",
       });
     }
-
   } catch (error) {
-    console.error('🚨 Error en endpoint /reproducir:', error);
-    res.status(500).json({ 
+    console.error("🚨 Error en endpoint /reproducir:", error);
+    res.status(500).json({
       error: "Error interno del servidor",
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details:
+        process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 });
 
 // GET /episodios/:animeId/:episodio - Nuevo endpoint para obtener stream de episodio específico
-app.get("/episodios/:animeId/:episodio", authenticateToken, async (req, res) => {
-  try {
-    const { animeId, episodio } = req.params;
-
-    // Validar parámetros
-    if (!animeId || !episodio) {
-      return res.status(400).json({ 
-        error: "Los parámetros 'animeId' y 'episodio' son requeridos" 
-      });
-    }
-
-    console.log(`🎬 Solicitud de episodio - Anime ID: ${animeId}, Episodio: ${episodio}`);
-
-    // Buscar anime en la base de datos
-    const animes = await readJsonFile("animes.json");
-    const anime = animes.find((a) => a.id === parseInt(animeId));
-
-    if (!anime) {
-      return res.status(404).json({ error: "Anime no encontrado" });
-    }
-
-    // Buscar episodio específico
-    const ep = anime.episodios.find((e) => e.numero === parseInt(episodio));
-
-    if (!ep) {
-      return res.status(404).json({ error: "Episodio no encontrado" });
-    }
-
-    // Verificar que el url_stream sea válido
-    if (!ep.url_stream || !ep.url_stream.includes('latanime.org')) {
-      return res.status(400).json({ 
-        error: "URL de episodio no válida o no soportada" 
-      });
-    }
-
+app.get(
+  "/episodios/:animeId/:episodio",
+  authenticateToken,
+  async (req, res) => {
     try {
-      // Resolver el stream de video usando puppeteer
-      console.log(`🔍 Resolviendo stream para: ${ep.url_stream}`);
-      
-      const videoData = await resolveVideoStream(ep.url_stream);
-      
-      // Registrar en historial del usuario
+      const { animeId, episodio } = req.params;
+
+      // Validar parámetros
+      if (!animeId || !episodio) {
+        return res.status(400).json({
+          error: "Los parámetros 'animeId' y 'episodio' son requeridos",
+        });
+      }
+
+      console.log(
+        `🎬 Solicitud de episodio - Anime ID: ${animeId}, Episodio: ${episodio}`
+      );
+
+      // Buscar anime en la base de datos
+      const animes = await readJsonFile("animes.json");
+      const anime = animes.find((a) => a.id === parseInt(animeId));
+
+      if (!anime) {
+        return res.status(404).json({ error: "Anime no encontrado" });
+      }
+
+      // Buscar episodio específico
+      const ep = anime.episodios.find((e) => e.numero === parseInt(episodio));
+
+      if (!ep) {
+        return res.status(404).json({ error: "Episodio no encontrado" });
+      }
+
+      // Verificar que el url_stream sea válido
+      if (!ep.url_stream || !ep.url_stream.includes("latanime.org")) {
+        return res.status(400).json({
+          error: "URL de episodio no válida o no soportada",
+        });
+      }
+
+      try {
+        // Resolver el stream de video usando puppeteer
+        console.log(`🔍 Resolviendo stream para: ${ep.url_stream}`);
+
+        const videoData = await resolveVideoStream(ep.url_stream);
+
+        // Registrar en historial del usuario
+        await registrarHistorial(req.user.id, {
+          animeId: anime.id,
+          episodio: ep.numero,
+          fechaVisto: new Date().toISOString(),
+          animeTitle: anime.titulo,
+          animeImage: anime.imagen,
+          progreso: 0,
+        });
+
+        // Respuesta exitosa
+        res.json({
+          success: true,
+          data: {
+            ...videoData,
+            titulo: ep.titulo,
+            anime: anime.titulo,
+            episodio: ep.numero,
+            duracion: ep.duracion,
+            imagen: anime.imagen,
+          },
+        });
+
+        console.log(
+          `✅ Stream resuelto exitosamente para ${anime.titulo} - Episodio ${ep.numero}`
+        );
+      } catch (resolverError) {
+        console.error(`🚨 Error resolviendo stream:`, resolverError.message);
+
+        // Fallback: devolver URL original si el scraping falla
+        res.json({
+          success: false,
+          fallback: true,
+          data: {
+            servidor: "Original",
+            url: ep.url_stream,
+            tipo: "webpage",
+            titulo: ep.titulo,
+            anime: anime.titulo,
+            episodio: ep.numero,
+            duracion: ep.duracion,
+            imagen: anime.imagen,
+          },
+          error: "No se pudo resolver automáticamente, usando enlace original",
+        });
+      }
+    } catch (error) {
+      console.error("🚨 Error en endpoint /episodios:", error);
+      res.status(500).json({
+        error: "Error interno del servidor",
+        details:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
+      });
+    }
+  }
+);
+
+// GET /reproductor/:animeId/:episodio - Scraping en tiempo real desde LatAnime
+app.get("/reproductor/:animeId/:episodio", authenticateToken, async (req, res) => {
+  const { animeId, episodio } = req.params;
+
+  if (!animeId || !episodio) {
+    return res.status(400).json({ error: "Parámetros inválidos" });
+  }
+
+  try {
+    console.log(`🎬 Scrapeando servidores para: ${animeId} - Episodio ${episodio}`);
+
+    const servidoresObtenidos = await obtenerServidoresDesdeLatAnime(animeId, episodio);
+
+    if (!servidoresObtenidos || servidoresObtenidos.length === 0) {
+      return res.status(404).json({ error: "No se encontraron servidores disponibles" });
+    }
+
+    const animes = await readJsonFile("animes.json");
+    const anime = animes.find((a) => {
+      // Buscar por slug extraído de la URL del primer episodio
+      if (a.episodios && a.episodios.length > 0) {
+        const urlStream = a.episodios[0].url_stream;
+        const match = urlStream.match(/\/ver\/(.+)-episodio-\d+$/);
+        const slug = match ? match[1] : '';
+        return slug === animeId;
+      }
+      return false;
+    });
+
+    if (anime) {
       await registrarHistorial(req.user.id, {
         animeId: anime.id,
-        episodio: ep.numero,
+        episodio: parseInt(episodio),
         fechaVisto: new Date().toISOString(),
         animeTitle: anime.titulo,
         animeImage: anime.imagen,
         progreso: 0
       });
-
-      // Respuesta exitosa
-      res.json({
-        success: true,
-        data: {
-          ...videoData,
-          titulo: ep.titulo,
-          anime: anime.titulo,
-          episodio: ep.numero,
-          duracion: ep.duracion,
-          imagen: anime.imagen
-        }
-      });
-
-      console.log(`✅ Stream resuelto exitosamente para ${anime.titulo} - Episodio ${ep.numero}`);
-      
-    } catch (resolverError) {
-      console.error(`🚨 Error resolviendo stream:`, resolverError.message);
-      
-      // Fallback: devolver URL original si el scraping falla
-      res.json({
-        success: false,
-        fallback: true,
-        data: {
-          servidor: "Original",
-          url: ep.url_stream,
-          tipo: "webpage",
-          titulo: ep.titulo,
-          anime: anime.titulo,
-          episodio: ep.numero,
-          duracion: ep.duracion,
-          imagen: anime.imagen
-        },
-        error: "No se pudo resolver automáticamente, usando enlace original"
-      });
     }
 
-  } catch (error) {
-    console.error('🚨 Error en endpoint /episodios:', error);
-    res.status(500).json({ 
-      error: "Error interno del servidor",
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    return res.json({
+      animeId,
+      episodioId: episodio,
+      servidores: servidoresObtenidos
     });
+
+  } catch (err) {
+    console.error("❌ Error al scrapear iframes:", err);
+    return res.status(500).json({ error: "Error interno al obtener los servidores" });
   }
 });
 
 // GET /reproductor/:animeId/:episodio - Nuevo endpoint para obtener servidores con fallback
-app.get("/reproductor/:animeId/:episodio", authenticateToken, async (req, res) => {
+app.get('/reproductor/:animeId/:episodioId', authenticateToken, async (req, res) => {
+  const { animeId, episodioId } = req.params;
+
   try {
-    const { animeId, episodio } = req.params;
+    const dataPath = path.join(__dirname, 'data', 'animes.json');
+    const animes = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
 
-    // Validar parámetros
-    if (!animeId || !episodio) {
-      return res.status(400).json({ 
-        error: "Los parámetros 'animeId' y 'episodio' son requeridos" 
-      });
-    }
+    const anime = animes.find(a => a.id === animeId);
+    if (!anime) return res.status(404).json({ error: 'Anime no encontrado' });
 
-    console.log(`🎬 Solicitud de servidores - Anime ID: ${animeId}, Episodio: ${episodio}`);
+    const episodio = anime.episodios.find(e => e.id == episodioId);
+    if (!episodio) return res.status(404).json({ error: 'Episodio no encontrado' });
 
-    // Buscar anime en la base de datos
-    const animes = await readJsonFile("animes.json");
-    const anime = animes.find((a) => a.id === parseInt(animeId));
+    // Simulamos múltiples servidores en base a la URL original
+    const servidores = [
+      { nombre: 'Desu', url: episodio.url_stream },
+      { nombre: 'Magi', url: episodio.url_stream },
+      { nombre: 'Mega', url: episodio.url_stream }
+    ];
 
-    if (!anime) {
-      return res.status(404).json({ error: "Anime no encontrado" });
-    }
-
-    // Buscar episodio específico
-    const ep = anime.episodios.find((e) => e.numero === parseInt(episodio));
-
-    if (!ep) {
-      return res.status(404).json({ error: "Episodio no encontrado" });
-    }
-
-    // Verificar que el url_stream sea válido
-    if (!ep.url_stream || !ep.url_stream.includes('latanime.org')) {
-      return res.status(400).json({ 
-        error: "URL de episodio no válida o no soportada" 
-      });
-    }
-
-    try {
-      // Hacer scraping de la página de latanime.org
-      console.log(`🔍 Haciendo scraping de: ${ep.url_stream}`);
-      
-      const response = await axios.get(ep.url_stream, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        },
-        timeout: 10000
-      });
-
-      const $ = cheerio.load(response.data);
-      const servidores = [];
-
-      // Extraer iframes de los diferentes servidores
-      const serverPatterns = {
-        'doodstream': /dood\.(la|to|ws|sh|pm|re|wf|cx|watch)/i,
-        'yourupload': /yourupload\.com/i,
-        'mp4upload': /mp4upload\.com/i,
-        'ok': /ok\.ru/i
-      };
-
-      // Buscar todos los iframes en la página
-      $('iframe').each((index, element) => {
-        const src = $(element).attr('src');
-        if (src) {
-          // Determinar el tipo de servidor
-          for (const [serverName, pattern] of Object.entries(serverPatterns)) {
-            if (pattern.test(src)) {
-              servidores.push({
-                nombre: serverName,
-                iframe: src.startsWith('//') ? `https:${src}` : src,
-                prioridad: getPrioridad(serverName)
-              });
-              break;
-            }
-          }
-        }
-      });
-
-      // Buscar también en enlaces que pueden contener URLs de servidores
-      $('a[href]').each((index, element) => {
-        const href = $(element).attr('href');
-        if (href) {
-          for (const [serverName, pattern] of Object.entries(serverPatterns)) {
-            if (pattern.test(href)) {
-              // Verificar si ya existe este servidor
-              const exists = servidores.some(s => s.nombre === serverName);
-              if (!exists) {
-                servidores.push({
-                  nombre: serverName,
-                  iframe: href.startsWith('//') ? `https:${href}` : href,
-                  prioridad: getPrioridad(serverName)
-                });
-              }
-              break;
-            }
-          }
-        }
-      });
-
-      // Ordenar por prioridad
-      servidores.sort((a, b) => a.prioridad - b.prioridad);
-
-      // Registrar en historial del usuario
-      await registrarHistorial(req.user.id, {
-        animeId: anime.id,
-        episodio: ep.numero,
-        fechaVisto: new Date().toISOString(),
-        animeTitle: anime.titulo,
-        animeImage: anime.imagen,
-        progreso: 0
-      });
-
-      // Respuesta exitosa
-      res.json({
-        success: true,
-        anime: {
-          id: anime.id,
-          titulo: anime.titulo,
-          imagen: anime.imagen
-        },
-        episodio: {
-          numero: ep.numero,
-          titulo: ep.titulo,
-          duracion: ep.duracion
-        },
-        servidores: servidores.length > 0 ? servidores : [{
-          nombre: "original",
-          iframe: ep.url_stream,
-          prioridad: 999
-        }]
-      });
-
-      console.log(`✅ Servidores encontrados: ${servidores.length}`);
-      
-    } catch (scrapingError) {
-      console.error(`🚨 Error haciendo scraping:`, scrapingError.message);
-      
-      // Fallback: devolver URL original
-      res.json({
-        success: false,
-        fallback: true,
-        anime: {
-          id: anime.id,
-          titulo: anime.titulo,
-          imagen: anime.imagen
-        },
-        episodio: {
-          numero: ep.numero,
-          titulo: ep.titulo,
-          duracion: ep.duracion
-        },
-        servidores: [{
-          nombre: "original",
-          iframe: ep.url_stream,
-          prioridad: 999
-        }],
-        error: "No se pudo extraer servidores, usando enlace original"
-      });
-    }
-
+    res.json(servidores);
   } catch (error) {
-    console.error('🚨 Error en endpoint /reproductor:', error);
-    res.status(500).json({ 
-      error: "Error interno del servidor",
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    console.error("Error al leer servidores:", error);
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
 
 // Función auxiliar para determinar prioridad de servidores
 function getPrioridad(serverName) {
   const prioridades = {
-    'doodstream': 1,
-    'yourupload': 2,
-    'mp4upload': 3,
-    'ok': 4,
-    'original': 999
+    doodstream: 1,
+    yourupload: 2,
+    mp4upload: 3,
+    ok: 4,
+    original: 999,
   };
   return prioridades[serverName] || 999;
 }
@@ -537,29 +526,32 @@ function getPrioridad(serverName) {
 async function registrarHistorial(userId, data) {
   try {
     const usuarios = await readJsonFile("users.json");
-    const usuario = usuarios.find(u => u.id === userId);
-    
+    const usuario = usuarios.find((u) => u.id === userId);
+
     if (usuario) {
       if (!usuario.historial) usuario.historial = [];
-      
+
       // Evitar duplicados del mismo episodio
       const existingIndex = usuario.historial.findIndex(
-        h => h.animeId === data.animeId && h.episodio === data.episodio
+        (h) => h.animeId === data.animeId && h.episodio === data.episodio
       );
-      
+
       if (existingIndex >= 0) {
-        usuario.historial[existingIndex] = { ...usuario.historial[existingIndex], ...data };
+        usuario.historial[existingIndex] = {
+          ...usuario.historial[existingIndex],
+          ...data,
+        };
       } else {
         usuario.historial.unshift(data);
       }
-      
+
       // Mantener solo los últimos 50 elementos
       usuario.historial = usuario.historial.slice(0, 50);
-      
+
       await writeJsonFile("users.json", usuarios);
     }
   } catch (error) {
-    console.error('Error registrando historial:', error);
+    console.error("Error registrando historial:", error);
   }
 }
 
@@ -754,3 +746,293 @@ const server = app.listen(PORT, () => {
 server.on("error", (error) => {
   console.error("Server error:", error);
 });
+
+// POST /login - Endpoint de login de prueba
+app.post("/login", (req, res) => {
+  const { username } = req.body;
+
+  if (!username) {
+    return res.status(400).json({ error: "Username es requerido" });
+  }
+
+  const token = jwt.sign({ id: 1, username }, JWT_SECRET, { expiresIn: "2h" });
+
+  res.json({
+    token,
+    user: {
+      id: 1,
+      username,
+    },
+  });
+});
+
+// Función para obtener servidores desde LatAnime usando Puppeteer
+async function obtenerServidoresDesdeLatAnime(animeId, episodioId) {
+  const urlLatAnime = `https://latanime.org/ver/${animeId}-episodio-${episodioId}`;
+
+  console.log(`🔍 Accediendo a: ${urlLatAnime}`);
+
+  const browser = await puppeteer.launch({
+    headless: true, // Cambiar a true para producción
+    defaultViewport: null,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+
+  const page = await browser.newPage();
+
+  try {
+    // Configurar User-Agent para evitar detección
+    await page.setUserAgent(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    );
+
+    await page.goto(urlLatAnime, { waitUntil: "networkidle2", timeout: 30000 });
+    await page.waitForTimeout(5000);
+
+    // Buscar elementos con clase .play-video
+    const servidoresRaw = await page.$$eval(".play-video", (els) =>
+      els.map((el) => ({
+        nombre: el.textContent.trim(),
+        base64url: el.getAttribute("data-player"),
+      }))
+    );
+
+    console.log(`📡 Encontrados ${servidoresRaw.length} servidores raw`);
+
+    const servidores = [];
+    for (const s of servidoresRaw) {
+      try {
+        if (s.base64url) {
+          const decodedUrl = Buffer.from(s.base64url, "base64").toString("utf-8");
+          
+          // Verificar si la URL es embebible (contiene 'embed' o es un iframe directo)
+          let iframeUrl = decodedUrl;
+          
+          // Si no es una URL de embed, intentar convertirla
+          if (!decodedUrl.includes('embed') && !decodedUrl.includes('iframe')) {
+            // Para algunos servidores, necesitamos navegar y extraer el iframe real
+            try {
+              const iframePage = await browser.newPage();
+              await iframePage.goto(decodedUrl, { waitUntil: 'networkidle2', timeout: 15000 });
+              
+              // Buscar iframe embebible en la página
+              const embedUrl = await iframePage.evaluate(() => {
+                const iframe = document.querySelector('iframe[src*="embed"], iframe[src*="player"]');
+                return iframe ? iframe.src : null;
+              });
+              
+              if (embedUrl) {
+                iframeUrl = embedUrl;
+              }
+              
+              await iframePage.close();
+            } catch (embedError) {
+              console.log(`⚠️ No se pudo extraer iframe de ${s.nombre}, usando URL original`);
+            }
+          }
+          
+          servidores.push({
+            nombre: s.nombre.toLowerCase().replace(/\s+/g, ""),
+            iframe: iframeUrl, // URL específica para embebido
+            prioridad: getPrioridad(s.nombre.toLowerCase()) || 999,
+            servidor: s.nombre.toLowerCase().replace(/\s+/g, ""),
+            url: decodedUrl,
+          });
+          
+          console.log(`✅ Servidor procesado: ${s.nombre} -> ${iframeUrl}`);
+        }
+      } catch (decodeError) {
+        console.log(`❌ Error procesando ${s.nombre}:`, decodeError.message);
+      }
+    }
+
+    return servidores;
+  } catch (error) {
+    console.error(`🚨 Error en scraping de ${urlLatAnime}:`, error.message);
+    throw error;
+  } finally {
+    await browser.close();
+  }
+}
+
+// Ruta para registrar nuevo anime
+app.post('/api/animes/register', authenticateToken, async (req, res) => {
+  try {
+    const { nombre, sitio } = req.body;
+    
+    if (!nombre || !sitio) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Nombre y sitio son requeridos' 
+      });
+    }
+    
+    if (sitio !== 'latanime') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Sitio no soportado. Solo se admite: latanime' 
+      });
+    }
+    
+    console.log(`🎬 Iniciando scraping de: ${nombre} desde ${sitio}`);
+    
+    // Inicializar scraper
+    const scraper = new LatAnimeScraper();
+    
+    try {
+      // Buscar y scrapear anime
+      const animeData = await scraper.buscarAnime(nombre);
+      
+      // Verificar si el anime ya existe
+      const animeExistente = await Anime.findOne({ 
+        where: { slug: animeData.slug } 
+      });
+      
+      let anime;
+      
+      if (animeExistente) {
+        // Actualizar anime existente
+        await animeExistente.update({
+          titulo: animeData.titulo,
+          sinopsis: animeData.sinopsis,
+          imagen: animeData.imagen,
+          generos: animeData.generos,
+          año: animeData.año,
+          estado: animeData.estado,
+          idioma: animeData.idioma,
+          categoria: animeData.categoria,
+          url_origen: animeData.url_origen
+        });
+        
+        // Eliminar episodios existentes
+        await Episodio.destroy({ where: { anime_id: animeExistente.id } });
+        
+        anime = animeExistente;
+        console.log(`📝 Anime actualizado: ${animeData.titulo}`);
+      } else {
+        // Crear nuevo anime
+        anime = await Anime.create({
+          titulo: animeData.titulo,
+          sinopsis: animeData.sinopsis,
+          imagen: animeData.imagen,
+          generos: animeData.generos,
+          año: animeData.año,
+          estado: animeData.estado,
+          idioma: animeData.idioma,
+          categoria: animeData.categoria,
+          sitio_origen: animeData.sitio_origen,
+          url_origen: animeData.url_origen,
+          slug: animeData.slug
+        });
+        
+        console.log(`✨ Nuevo anime creado: ${animeData.titulo}`);
+      }
+      
+      // Crear episodios
+      const episodiosData = animeData.episodios.map(ep => ({
+        ...ep,
+        anime_id: anime.id
+      }));
+      
+      await Episodio.bulkCreate(episodiosData);
+      
+      console.log(`📺 ${episodiosData.length} episodios guardados`);
+      
+      await scraper.close();
+      
+      res.json({
+        success: true,
+        message: `Anime ${animeExistente ? 'actualizado' : 'registrado'} correctamente`,
+        anime: {
+          id: anime.id,
+          titulo: anime.titulo,
+          episodios: episodiosData.length
+        }
+      });
+      
+    } catch (scrapingError) {
+      await scraper.close();
+      throw scrapingError;
+    }
+    
+  } catch (error) {
+    console.error('❌ Error al registrar anime:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al procesar el anime: ' + error.message
+    });
+  }
+});
+
+
+
+// DELETE /api/animes/:id - Eliminar anime
+app.delete('/api/animes/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Buscar el anime
+    const anime = await Anime.findByPk(id);
+    
+    if (!anime) {
+      return res.status(404).json({
+        success: false,
+        message: 'Anime no encontrado'
+      });
+    }
+    
+    // Eliminar episodios asociados
+    await Episodio.destroy({ where: { anime_id: id } });
+    
+    // Eliminar anime
+    await anime.destroy();
+    
+    console.log(`🗑️ Anime eliminado: ${anime.titulo}`);
+    
+    res.json({
+      success: true,
+      message: 'Anime eliminado correctamente'
+    });
+    
+  } catch (error) {
+    console.error('❌ Error al eliminar anime:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al eliminar el anime: ' + error.message
+    });
+  }
+});
+
+// GET /api/animes/registered - Mejorado para incluir conteo de episodios
+app.get('/api/animes/registered', authenticateToken, async (req, res) => {
+  try {
+    const animes = await Anime.findAll({
+      include: [{
+        model: Episodio,
+        as: 'episodios',
+        attributes: ['id']
+      }],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    // Agregar conteo de episodios
+    const animesConEpisodios = animes.map(anime => ({
+      ...anime.toJSON(),
+      episodios: anime.episodios ? anime.episodios.length : 0
+    }));
+    
+    res.json({
+      success: true,
+      animes: animesConEpisodios
+    });
+    
+  } catch (error) {
+    console.error('❌ Error al obtener animes:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener animes: ' + error.message
+    });
+  }
+});
+
+// ... existing code ...

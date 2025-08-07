@@ -1,0 +1,6 @@
+[
+  { "servidor": "filemoon", "url": "https://filemoon.sx/e/example1" },
+  { "servidor": "voe", "url": "https://voe.sx/e/example2" },
+  { "servidor": "doodstream", "url": "https://doodstream.com/e/example3" },
+  { "servidor": "mp4upload", "url": "https://mp4upload.com/e/example4" }
+]

@@ -45,7 +45,7 @@ export const VideoPlayerWithFallback: React.FC<VideoPlayerWithFallbackProps> = (
         console.log(`🎬 Obteniendo servidores para anime ${animeId}, episodio ${episodio}`);
 
         const response = await fetch(
-          `http://localhost:3001/reproductor/${animeId}/${episodio}`,
+          `http://localhost:3001/reproductor/${animeId}/${episodio}`, // animeId ahora contiene el slug
           {
             method: 'GET',
             headers: {

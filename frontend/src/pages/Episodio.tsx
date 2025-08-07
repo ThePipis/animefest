@@ -5,7 +5,7 @@ import { VideoPlayerWithFallback } from '../components/VideoPlayerWithFallback';
 import { useAuthStore } from '../stores/authStore';
 
 export const Episodio: React.FC = () => {
-  const { animeId, episodio } = useParams<{ animeId: string; episodio: string }>();
+  const { slug, episodio } = useParams<{ slug: string; episodio: string }>();
   const navigate = useNavigate();
   const { token, isAuthenticated } = useAuthStore();
 
@@ -16,7 +16,7 @@ export const Episodio: React.FC = () => {
   }
 
   // Verificar parámetros
-  if (!animeId || !episodio) {
+  if (!slug || !episodio) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
@@ -35,9 +35,9 @@ export const Episodio: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-900 py-8">
       <div className="container mx-auto px-4">
-        {/* Botón de regreso */}
+        {/* Botón de regreso - necesitaremos encontrar el ID del anime para navegar de vuelta */}
         <motion.button
-          onClick={() => navigate(`/anime/${animeId}`)}
+          onClick={() => navigate(-1)} // Usar navigate(-1) como alternativa
           className="mb-6 flex items-center space-x-2 text-gray-400 hover:text-white transition-colors"
           whileHover={{ x: -5 }}
         >
@@ -52,7 +52,7 @@ export const Episodio: React.FC = () => {
           transition={{ duration: 0.5 }}
         >
           <VideoPlayerWithFallback 
-            animeId={animeId}
+            animeId={slug} // Ahora pasamos el slug como animeId
             episodio={episodio}
             token={token}
           />

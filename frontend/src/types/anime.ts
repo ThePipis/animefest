@@ -16,4 +16,5 @@ export interface Anime {
   idioma: string;
   categoria: string;
   episodios: Episodio[];
+  slug?: string; // Campo opcional para el slug
 }

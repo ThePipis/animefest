@@ -107,6 +107,13 @@ const EpisodeRangeSelector: React.FC<EpisodeRangeSelectorProps> = ({
   );
 };
 
+// Función para extraer slug de la URL de stream
+const extractSlugFromUrl = (url: string): string => {
+  // Extraer el slug de URLs como: https://latanime.org/ver/overlord-the-sacred-kingdom-episodio-1
+  const match = url.match(/\/ver\/(.+)-episodio-\d+$/);
+  return match ? match[1] : '';
+};
+
 export const AnimeDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [anime, setAnime] = useState<Anime | null>(null);
@@ -498,7 +505,7 @@ export const AnimeDetail: React.FC = () => {
                           <p className="text-dark-400 text-sm">Duración: {episodio.duracion}</p>
                         </div>
                         <Link
-                          to={`/episodio/${anime.id}/${episodio.numero}`}
+                          to={`/episodio/${extractSlugFromUrl(episodio.url_stream)}/${episodio.numero}`}
                           className="btn-primary ml-4"
                         >
                           ▶️ Ver
