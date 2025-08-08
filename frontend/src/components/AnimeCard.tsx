@@ -11,6 +11,7 @@ interface Anime {
   año: number;
   estado: string;
   categoria: string;
+  slug: string; // Agregar campo slug
 }
 
 interface AnimeCardProps {
@@ -27,7 +28,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ anime, index }) => {
       whileHover={{ y: -8, scale: 1.02 }}
       className="group cursor-pointer"
     >
-      <Link to={`/anime/${anime.id}`}>
+      <Link to={`/anime/${anime.slug}`}>
         <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl overflow-hidden border border-dark-700/50 hover:border-primary-500/30 transition-all duration-300">
           <div className="relative">
             <div className="aspect-[3/4] overflow-hidden">

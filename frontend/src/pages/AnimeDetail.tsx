@@ -23,12 +23,6 @@ interface Anime {
   episodios: Episodio[];
 }
 
-interface Favorito {
-  id: number;
-  titulo: string;
-  imagen: string;
-}
-
 // Componente del dropdown selector de rangos de episodios
 interface EpisodeRangeSelectorProps {
   totalEpisodes: number;
@@ -115,7 +109,7 @@ const extractSlugFromUrl = (url: string): string => {
 };
 
 export const AnimeDetail: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { slug } = useParams<{ slug: string }>();
   const [anime, setAnime] = useState<Anime | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -138,7 +132,7 @@ export const AnimeDetail: React.FC = () => {
     setError('');
     
     try {
-      const response = await api.getAnime(parseInt(id!));
+      const response = await api.getAnime(slug!);
       
       if (response.error) {
         setError(response.error);
@@ -150,28 +144,55 @@ export const AnimeDetail: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [api, id]);
+  }, [api, slug]);
 
-  const checkFavoriteStatus = useCallback(async () => {
-    try {
-      const response = await api.getFavoritos();
-      if (response.data && Array.isArray(response.data)) {
-        const favoriteIds = response.data.map((fav: Favorito) => fav.id);
-        setIsFavorite(favoriteIds.includes(parseInt(id!)));
-      }
-    } catch (err) {
-      console.error('Error checking favorite status:', err);
-    }
-  }, [api, id]);
+  // ⚠️ Función eliminada: checkFavoriteStatus ya no se usa y hacía referencia a `id`
+  // const checkFavoriteStatus = useCallback(async () => {
+  //   try {
+  //     const response = await api.getFavoritos();
+  //     if (response.data && Array.isArray(response.data)) {
+  //       const favoriteIds = response.data.map((fav: Favorito) => fav.id);
+  //       setIsFavorite(favoriteIds.includes(parseInt(id!)));
+  //     }
+  //   } catch (err) {
+  //     console.error('Error checking favorite status:', err);
+  //   }
+  // }, [api, id]);
 
+  // Nuevo efecto para actualizar el estado de favoritos cuando cambie `anime`
   useEffect(() => {
-    if (id) {
-      fetchAnime();
-      if (isAuthenticated) {
-        checkFavoriteStatus();
-      }
+    if (isAuthenticated && anime) {
+      const fetchFavs = async () => {
+        try {
+          const favResp = await api.getFavoritos();
+          if (favResp.data && Array.isArray(favResp.data)) {
+            const favoriteIds = favResp.data.map((fav: { id: number }) => fav.id);
+            setIsFavorite(favoriteIds.includes(anime.id));
+          }
+        } catch (err) {
+          console.error('Error checking favorite status:', err);
+        }
+      };
+      fetchFavs();
     }
-  }, [id, isAuthenticated, fetchAnime, checkFavoriteStatus]);
+  }, [anime, isAuthenticated]);
+
+  // Usar el parámetro `slug` en lugar de `id`
+  useEffect(() => {
+    if (slug) {
+      fetchAnime(); // Carga el anime con api.getAnime(slug)
+    }
+  }, [slug, fetchAnime]);
+
+  // ⚠️ useEffect anterior eliminado: ya no usa `id` ni llama a checkFavoriteStatus
+  // useEffect(() => {
+  //   if (id) {
+  //     fetchAnime();
+  //     if (isAuthenticated) {
+  //       checkFavoriteStatus();
+  //     }
+  //   }
+  // }, [id, isAuthenticated, fetchAnime, checkFavoriteStatus]);
 
   // Nuevo useEffect para scroll automático al cargar la página
   useEffect(() => {

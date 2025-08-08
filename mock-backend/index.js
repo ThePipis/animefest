@@ -211,33 +211,47 @@ app.get("/animes", async (req, res) => {
   }
 });
 
-// GET /anime/:id - Detalles de un anime específico (MODIFICADO)
-app.get("/anime/:id", async (req, res) => {
+// GET /anime/:identifier - Detalles de un anime específico (MODIFICADO para soportar ID y slug)
+app.get("/anime/:identifier", async (req, res) => {
   try {
-    // Cambiar de archivo JSON a base de datos
-    const anime = await Anime.findByPk(req.params.id, {
-      include: [{
-        model: Episodio,
-        as: 'episodios',
-        attributes: ['numero', 'titulo', 'duracion', 'url_stream'],
-        order: [['numero', 'ASC']]
-      }]
-    });
+    const { identifier } = req.params;
+    let anime;
+
+    if (isNaN(Number(identifier))) {
+      // Buscar por slug
+      anime = await Anime.findOne({
+        where: { slug: identifier },
+        include: [{
+          model: Episodio,
+          as: 'episodios',
+          attributes: ['numero', 'titulo', 'duracion', 'url_stream'],
+          order: [['numero', 'ASC']]
+        }]
+      });
+    } else {
+      // Buscar por ID numérico
+      anime = await Anime.findByPk(identifier, {
+        include: [{
+          model: Episodio,
+          as: 'episodios',
+          attributes: ['numero', 'titulo', 'duracion', 'url_stream'],
+          order: [['numero', 'ASC']]
+        }]
+      });
+    }
 
     if (!anime) {
       return res.status(404).json({ error: "Anime no encontrado" });
     }
 
-    // Convertir a formato JSON
-    const resultado = {
+    // Devolver anime + episodios en formato JSON
+    res.json({
       ...anime.toJSON(),
       episodios: anime.episodios || []
-    };
-
-    res.json(resultado);
+    });
   } catch (error) {
-    console.error('❌ Error al obtener el anime:', error);
-    res.status(500).json({ error: "Error al obtener el anime" });
+    console.error('❌ Error al obtener el anime por identificador:', error);
+    return res.status(500).json({ error: "Error al obtener el anime" });
   }
 });
 

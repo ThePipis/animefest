@@ -117,7 +117,7 @@ export const useApi = () => {
     },
 
     // Anime específico
-    getAnime: (id: number) => apiClient.get(`/anime/${id}`),
+    getAnime: (identifier: string | number) => apiClient.get(`/anime/${identifier}`),
 
     // Stream
     getStream: (animeId: number, episodio: number) =>
