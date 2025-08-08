@@ -20,6 +20,7 @@ interface Anime {
   año: number;
   estado: string;
   categoria: string;
+  slug: string; // ← Agregar este campo
   episodios: Episodio[];
 }
 
