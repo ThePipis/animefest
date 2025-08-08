@@ -4,6 +4,8 @@ import path from 'path';
 
 import { fileURLToPath } from 'url';
 
+import fs from 'fs/promises';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -11,7 +13,7 @@ const __dirname = path.dirname(__filename);
 const sequelize = new Sequelize({
   dialect: 'sqlite',
   storage: path.join(__dirname, 'animefest.sqlite'),
-  logging: console.log, // Cambiar de false a console.log para ver errores
+  logging: console.log,
 });
 
 // Modelo Anime
@@ -120,7 +122,86 @@ Episodio.belongsTo(Anime, {
   as: 'anime'
 });
 
-// Función para inicializar la base de datos
+// ✅ NUEVO: Modelo Usuario con sistema de roles
+const Usuario = sequelize.define('Usuario', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  username: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true
+  },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true
+  },
+  password: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  // ✅ NUEVO: Campo de rol
+  rol: {
+    type: DataTypes.ENUM('admin', 'usuario'),
+    allowNull: false,
+    defaultValue: 'usuario'
+  },
+  favoritos: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    defaultValue: []
+  },
+  historial: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    defaultValue: []
+  }
+}, {
+  tableName: 'usuarios',
+  timestamps: true
+});
+
+// ✅ FUNCIÓN para migrar usuarios desde JSON
+// ✅ ACTUALIZADA: Función para migrar usuarios con roles
+const migrateUsersFromJson = async () => {
+  try {
+    // ❌ ELIMINAR: Referencias a users.json
+    // const usersJsonPath = path.join(__dirname, '..', 'data', 'users.json');
+    // console.log('🔄 Migrando usuarios desde users.json...');
+    const usersData = await fs.readFile(usersJsonPath, 'utf8');
+    const users = JSON.parse(usersData);
+    
+    console.log('🔄 Migrando usuarios desde users.json...');
+    
+    for (const user of users) {
+      const existingUser = await Usuario.findOne({ where: { username: user.username } });
+      
+      if (!existingUser) {
+        await Usuario.create({
+          username: user.username,
+          email: user.email,
+          password: user.password,
+          // ✅ NUEVO: Asignar rol admin solo al usuario 'admin'
+          rol: user.username === 'admin' ? 'admin' : 'usuario',
+          favoritos: user.favoritos || [],
+          historial: user.historial || []
+        });
+        console.log(`✅ Usuario migrado: ${user.username} (${user.username === 'admin' ? 'ADMIN' : 'USUARIO'})`);
+      } else {
+        console.log(`⚠️ Usuario ya existe: ${user.username}`);
+      }
+    }
+    
+    console.log('✅ Migración de usuarios completada');
+  } catch (error) {
+    console.error('❌ Error migrando usuarios:', error);
+  }
+};
+
+// ✅ FUNCIÓN SIMPLIFICADA - sin migración de users.json
 export const initDatabase = async () => {
   try {
     console.log('🔄 Iniciando conexión a la base de datos...');
@@ -129,10 +210,11 @@ export const initDatabase = async () => {
     await sequelize.authenticate();
     console.log('✅ Conexión a SQLite establecida correctamente.');
     
-    // Sincronizar modelos (crear tablas si no existen)
-    await sequelize.sync({ alter: true });
+    // ✅ CAMBIO: Usar force: true para recrear las tablas con el esquema correcto
+    await sequelize.sync({ force: true });
     console.log('✅ Modelos sincronizados correctamente.');
-    console.log('📄 Base de datos creada en:', path.join(__dirname, 'animefest.sqlite'));
+    
+    console.log('📄 Base de datos lista en:', path.join(__dirname, 'animefest.sqlite'));
     
     return true;
   } catch (error) {
@@ -142,4 +224,4 @@ export const initDatabase = async () => {
   }
 };
 
-export { sequelize, Anime, Episodio };
+export { sequelize, Anime, Episodio, Usuario };

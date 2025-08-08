@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import type { User } from '../types/types';
 
-const API_BASE_URL = 'http://localhost:3001';
+const API_BASE_URL = 'http://localhost:3001'; // ✅ Corregido: cambiar de 3000 a 3001
 
 interface ApiResponse<T> {
   data?: T;
@@ -113,15 +113,15 @@ export const useApi = () => {
       if (buscar) params.append('buscar', buscar);
       if (genero) params.append('genero', genero);
       const query = params.toString();
-      return apiClient.get(`/catalogo${query ? `?${query}` : ''}`);
+      return apiClient.get(`/api/catalogo${query ? `?${query}` : ''}`);
     },
 
-    // Anime específico
-    getAnime: (id: number) => apiClient.get(`/anime/${id}`),
+    // ✅ CORREGIDO: Anime específico con endpoint correcto
+    getAnime: (id: number) => apiClient.get(`/api/animes/${id}`),
 
     // Stream
     getStream: (animeId: number, episodio: number) =>
-      apiClient.get(`/reproducir?animeId=${animeId}&episodio=${episodio}`),
+      apiClient.get(`/api/reproducir?animeId=${animeId}&episodio=${episodio}`),
 
     // Autenticación
     login: (username: string, password: string) =>
@@ -129,17 +129,18 @@ export const useApi = () => {
 
     register: (username: string, email: string, password: string) =>
       apiClient.post<{ token: string; user: User }>('/registro', { username, email, password }),
+    
     // Usuario
-    getUser: () => apiClient.get('/usuario'),
+    getUser: () => apiClient.get('/api/usuario'),
 
     // Favoritos
-    getFavoritos: () => apiClient.get('/favoritos'),
-    addFavorito: (animeId: number) => apiClient.post('/favoritos', { animeId }),
-    removeFavorito: (animeId: number) => apiClient.delete(`/favoritos/${animeId}`),
+    getFavoritos: () => apiClient.get('/api/favoritos'),
+    addFavorito: (animeId: number) => apiClient.post('/api/favoritos', { animeId }),
+    removeFavorito: (animeId: number) => apiClient.delete(`/api/favoritos/${animeId}`),
 
     // Historial
-    getHistorial: () => apiClient.get('/historial'),
+    getHistorial: () => apiClient.get('/api/historial'),
     addHistorial: (animeId: number, episodio: number, progreso: number) =>
-      apiClient.post('/historial', { animeId, episodio, progreso }),
+      apiClient.post('/api/historial', { animeId, episodio, progreso }),
   }), []);
 };

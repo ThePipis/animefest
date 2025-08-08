@@ -3,36 +3,12 @@
     "id": 1,
     "username": "admin",
     "email": "admin@animefest.com",
-    "password": "$2b$10$XxF2jb0qoP/BrIKhfEn61e6YBTkKp5XggmNVdyE7aN5X2MoHjszF6",
-    "favoritos": [
-      13,
-      11
-    ],
-    "historial": [
-      {
-        "animeId": 12,
-        "episodio": 1,
-        "fechaVisto": "2025-08-06T13:52:06.915Z",
-        "animeTitle": "Overlord: The Sacred Kingdom",
-        "animeImage": "https://latanime.org/thumbs/imagen/overlord-the-sacred-kingdom-1743473199.jpg?v=1.5",
-        "progreso": 0
-      },
-      {
-        "animeId": 1,
-        "episodio": 1,
-        "progreso": 85,
-        "fechaVisto": "2024-01-15T10:30:00Z"
-      },
-      {
-        "animeId": 2,
-        "episodio": 1,
-        "progreso": 100,
-        "fechaVisto": "2024-01-14T20:15:00Z"
-      }
-    ]
+    "password": "$2a$12$Q925rx.d4bonPHMovntSneZYpQ4o3hAOqXEaXPZjKCQ6s7V2kk81q",
+    "favoritos": [],
+    "historial": []
   },
   {
-    "id": 2,
+    "id": 3,
     "username": "otaku_fan",
     "email": "fan@example.com",
     "password": "$2b$10$XxF2jb0qoP/BrIKhfEn61e6YBTkKp5XggmNVdyE7aN5X2MoHjszF6",

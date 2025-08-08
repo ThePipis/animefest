@@ -115,7 +115,8 @@ const extractSlugFromUrl = (url: string): string => {
 };
 
 export const AnimeDetail: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  // ✅ VERIFICAR: Asegurar que coincida con la ruta /anime/:animeId
+  const { id } = useParams<{ id: string }>(); // Si la ruta es /anime/:animeId, cambiar a animeId
   const [anime, setAnime] = useState<Anime | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -138,6 +139,7 @@ export const AnimeDetail: React.FC = () => {
     setError('');
     
     try {
+      // ✅ Ya está usando useApi correctamente
       const response = await api.getAnime(parseInt(id!));
       
       if (response.error) {

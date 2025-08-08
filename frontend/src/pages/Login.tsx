@@ -103,7 +103,7 @@ export const Login: React.FC = () => {
             <div className="text-center text-sm text-slate-500">
               <p className="mb-1">Credenciales de prueba:</p>
               <p>Usuario: <span className="text-blue-400">admin</span></p>
-              <p>Contraseña: <span className="text-blue-400">password</span></p>
+              <p>Contraseña: <span className="text-blue-400">admin123</span></p>
             </div>
           </div>
         </form>
