@@ -4,6 +4,11 @@ import axios from 'axios';
 
 import * as cheerio from 'cheerio';
 
+// Helper para esperar X milisegundos sin depender de page.waitForTimeout
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // Configuración de servidores conocidos y sus patrones
 const SERVER_PATTERNS = {
   doostream: {
@@ -74,7 +79,7 @@ export async function resolveVideoStream(episodeUrl) {
     });
     
     // Esperar a que carguen los servidores
-    await page.waitForTimeout(3000);
+    await delay(3000);
     
     // Extraer enlaces de servidores
     const serverLinks = await extractServerLinks(page);
@@ -212,7 +217,7 @@ function getServerType(url) {
 async function resolveDoostream(page, url) {
   try {
     await page.goto(url, { waitUntil: 'networkidle2' });
-    await page.waitForTimeout(2000);
+    await delay(2000);
     
     // Buscar el enlace de descarga/stream
     const videoUrl = await page.evaluate(() => {
@@ -239,7 +244,7 @@ async function resolveDoostream(page, url) {
 async function resolveMp4Upload(page, url) {
   try {
     await page.goto(url, { waitUntil: 'networkidle2' });
-    await page.waitForTimeout(2000);
+    await delay(2000);
     
     const videoUrl = await page.evaluate(() => {
       const video = document.querySelector('video');
@@ -255,7 +260,7 @@ async function resolveMp4Upload(page, url) {
 async function resolveStreamtape(page, url) {
   try {
     await page.goto(url, { waitUntil: 'networkidle2' });
-    await page.waitForTimeout(3000);
+    await delay(3000);
     
     const videoUrl = await page.evaluate(() => {
       const video = document.querySelector('video');
@@ -283,7 +288,7 @@ async function resolveStreamtape(page, url) {
 async function resolveOkRu(page, url) {
   try {
     await page.goto(url, { waitUntil: 'networkidle2' });
-    await page.waitForTimeout(2000);
+    await delay(2000);
     
     const videoUrl = await page.evaluate(() => {
       const video = document.querySelector('video');
@@ -299,7 +304,7 @@ async function resolveOkRu(page, url) {
 async function resolveFembed(page, url) {
   try {
     await page.goto(url, { waitUntil: 'networkidle2' });
-    await page.waitForTimeout(2000);
+    await delay(2000);
     
     const videoData = await page.evaluate(() => {
       const video = document.querySelector('video');
@@ -320,7 +325,7 @@ async function resolveFembed(page, url) {
 async function resolveGeneric(page, url) {
   try {
     await page.goto(url, { waitUntil: 'networkidle2' });
-    await page.waitForTimeout(2000);
+    await delay(2000);
     
     const videoUrl = await page.evaluate(() => {
       const video = document.querySelector('video');

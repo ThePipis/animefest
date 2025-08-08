@@ -851,7 +851,7 @@ async function obtenerServidoresDesdeLatAnime(animeId, episodioId) {
     );
 
     await page.goto(urlLatAnime, { waitUntil: "networkidle2", timeout: 30000 });
-    await page.waitForTimeout(5000);
+    await new Promise(resolve => setTimeout(resolve, 5000));
 
     // Buscar elementos con clase .play-video
     const servidoresRaw = await page.$$eval(".play-video", (els) =>
