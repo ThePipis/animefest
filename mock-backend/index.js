@@ -18,17 +18,22 @@ import * as cheerio from "cheerio";
 
 import puppeteer from "puppeteer";
 
+import dotenv from 'dotenv';
+
+import { Op } from 'sequelize';
+
 import { resolveVideoStream } from "./videoResolver.js";
 
-import { initDatabase, Anime, Episodio } from './db/database.js';
+import { initDatabase, Anime, Episodio, User } from './db/database.js';
 import { LatAnimeScraper } from './scrapers/latanime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3001;
-const JWT_SECRET = "animefest_secret_key_2024";
+// Leer puerto y secreto JWT desde variables de entorno con valores por defecto
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
+const JWT_SECRET = process.env.JWT_SECRET || "animefest_secret_key_2024";
 
 // Inicializar base de datos al arrancar el servidor
 initDatabase();
@@ -80,26 +85,36 @@ const writeJsonFile = async (filename, data) => {
   }
 };
 
-// Middleware de autenticación con fallback para desarrollo
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader?.split(" ")[1];
-
-  if (!token) {
-    // Fallback para entorno de desarrollo
-    req.user = { id: 1, username: "mockuser" };
-    return next();
+// Middleware de autenticación. Extrae el token JWT y busca el usuario en la base de datos.
+// En caso de token inválido o ausencia, responde con 401 en vez de usar un fallback inseguro.
+const authenticateToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers["authorization"] || req.headers["Authorization"];
+    const token = authHeader?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ error: 'Token requerido' });
+    }
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findByPk(decoded.id);
+    if (!user) {
+      return res.status(401).json({ error: 'Usuario no encontrado' });
+    }
+    // Adjuntar información básica del usuario al request
+    req.user = { id: user.id, username: user.username, role: user.role };
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Token inválido' });
   }
+};
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      // Fallback en caso de token inválido
-      req.user = { id: 1, username: "mockuser" };
-    } else {
-      req.user = user;
+// Middleware de autorización por roles. Acepta uno o más roles permitidos.
+const authorizeRoles = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Acceso denegado: permisos insuficientes' });
     }
     next();
-  });
+  };
 };
 
 // Rutas públicas
@@ -522,197 +537,172 @@ function getPrioridad(serverName) {
   return prioridades[serverName] || 999;
 }
 
-// Función auxiliar para registrar historial
+// Función auxiliar para registrar historial en la base de datos
 async function registrarHistorial(userId, data) {
   try {
-    const usuarios = await readJsonFile("users.json");
-    const usuario = usuarios.find((u) => u.id === userId);
-
-    if (usuario) {
-      if (!usuario.historial) usuario.historial = [];
-
-      // Evitar duplicados del mismo episodio
-      const existingIndex = usuario.historial.findIndex(
-        (h) => h.animeId === data.animeId && h.episodio === data.episodio
-      );
-
-      if (existingIndex >= 0) {
-        usuario.historial[existingIndex] = {
-          ...usuario.historial[existingIndex],
-          ...data,
-        };
-      } else {
-        usuario.historial.unshift(data);
-      }
-
-      // Mantener solo los últimos 50 elementos
-      usuario.historial = usuario.historial.slice(0, 50);
-
-      await writeJsonFile("users.json", usuarios);
+    const user = await User.findByPk(userId);
+    if (!user) {
+      console.warn(`registrarHistorial: usuario ${userId} no encontrado`);
+      return;
     }
+    // Clonar historial para evitar mutar directamente la instancia
+    const historial = Array.isArray(user.historial) ? [...user.historial] : [];
+    // Buscar si existe entrada para mismo anime/episodio
+    const existingIndex = historial.findIndex(
+      (h) => h.animeId === data.animeId && h.episodio === data.episodio
+    );
+    if (existingIndex >= 0) {
+      historial[existingIndex] = { ...historial[existingIndex], ...data };
+    } else {
+      // Insertar al inicio para mantener orden reciente
+      historial.unshift(data);
+    }
+    // Limitar a 50 registros
+    const limitedHist = historial.slice(0, 50);
+    await user.update({ historial: limitedHist });
   } catch (error) {
     console.error("Error registrando historial:", error);
   }
 }
 
-// GET /usuario - Datos del usuario actual
+// GET /usuario - Datos del usuario actual desde la base de datos
 app.get("/usuario", authenticateToken, async (req, res) => {
   try {
-    const users = await readJsonFile("users.json");
-    const user = users.find((u) => u.id === req.user.id);
-
+    const user = await User.findByPk(req.user.id);
     if (!user) {
-      return res.status(404).json({ error: "Usuario no encontrado" });
+      return res.status(404).json({ error: 'Usuario no encontrado' });
     }
-
-    res.json({
+    return res.json({
       id: user.id,
       username: user.username,
       email: user.email,
-      favoritos: user.favoritos,
-      historial: user.historial,
+      favoritos: user.favorites || [],
+      historial: user.historial || []
     });
   } catch (error) {
-    res.status(500).json({ error: "Error al obtener datos del usuario" });
+    console.error('Error al obtener datos del usuario:', error);
+    return res.status(500).json({ error: 'Error al obtener datos del usuario' });
   }
 });
 
-// GET /favoritos - Lista de favoritos del usuario
+// GET /favoritos - Lista de favoritos del usuario (base de datos)
 app.get("/favoritos", authenticateToken, async (req, res) => {
   try {
-    const users = await readJsonFile("users.json");
-    const animes = await readJsonFile("animes.json");
-    const user = users.find((u) => u.id === req.user.id);
-
+    const user = await User.findByPk(req.user.id);
     if (!user) {
-      return res.status(404).json({ error: "Usuario no encontrado" });
+      return res.status(404).json({ error: 'Usuario no encontrado' });
     }
-
-    const favoritos = animes.filter((anime) =>
-      user.favoritos.includes(anime.id)
-    );
-    res.json(favoritos);
+    const favorites = user.favorites || [];
+    // Obtener animes usando Sequelize
+    const animes = await Anime.findAll({ where: { id: favorites } });
+    return res.json(animes);
   } catch (error) {
-    res.status(500).json({ error: "Error al obtener favoritos" });
+    console.error('Error al obtener favoritos:', error);
+    return res.status(500).json({ error: 'Error al obtener favoritos' });
   }
 });
 
-// POST /favoritos - Agregar anime a favoritos
+// POST /favoritos - Agregar anime a favoritos (base de datos)
 app.post("/favoritos", authenticateToken, async (req, res) => {
   try {
     const { animeId } = req.body;
-
     if (!animeId) {
-      return res.status(400).json({ error: "animeId es requerido" });
+      return res.status(400).json({ error: 'animeId es requerido' });
     }
-
-    const users = await readJsonFile("users.json");
-    const userIndex = users.findIndex((u) => u.id === req.user.id);
-
-    if (userIndex === -1) {
-      return res.status(404).json({ error: "Usuario no encontrado" });
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
     }
-
-    if (!users[userIndex].favoritos.includes(animeId)) {
-      users[userIndex].favoritos.push(animeId);
-      await writeJsonFile("users.json", users);
+    const favs = Array.isArray(user.favorites) ? [...user.favorites] : [];
+    if (!favs.includes(animeId)) {
+      favs.push(animeId);
+      await user.update({ favorites: favs });
     }
-
-    res.json({ message: "Anime agregado a favoritos" });
+    return res.json({ message: 'Anime agregado a favoritos' });
   } catch (error) {
-    res.status(500).json({ error: "Error al agregar favorito" });
+    console.error('Error al agregar favorito:', error);
+    return res.status(500).json({ error: 'Error al agregar favorito' });
   }
 });
 
-// DELETE /favoritos/:id - Quitar anime de favoritos
+// DELETE /favoritos/:id - Quitar anime de favoritos (base de datos)
 app.delete("/favoritos/:id", authenticateToken, async (req, res) => {
   try {
     const animeId = parseInt(req.params.id);
-    const users = await readJsonFile("users.json");
-    const userIndex = users.findIndex((u) => u.id === req.user.id);
-
-    if (userIndex === -1) {
-      return res.status(404).json({ error: "Usuario no encontrado" });
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
     }
-
-    users[userIndex].favoritos = users[userIndex].favoritos.filter(
-      (id) => id !== animeId
-    );
-    await writeJsonFile("users.json", users);
-
-    res.json({ message: "Anime removido de favoritos" });
+    const favs = Array.isArray(user.favorites) ? [...user.favorites] : [];
+    const newFavs = favs.filter((id) => id !== animeId);
+    await user.update({ favorites: newFavs });
+    return res.json({ message: 'Anime removido de favoritos' });
   } catch (error) {
-    res.status(500).json({ error: "Error al remover favorito" });
+    console.error('Error al remover favorito:', error);
+    return res.status(500).json({ error: 'Error al remover favorito' });
   }
 });
 
-// GET /historial - Historial de reproducción del usuario
+// GET /historial - Historial de reproducción del usuario (base de datos)
 app.get("/historial", authenticateToken, async (req, res) => {
   try {
-    const users = await readJsonFile("users.json");
-    const animes = await readJsonFile("animes.json");
-    const user = users.find((u) => u.id === req.user.id);
-
+    const user = await User.findByPk(req.user.id);
     if (!user) {
       return res.status(404).json({ error: "Usuario no encontrado" });
     }
-
-    const historialConDetalles = user.historial.map((item) => {
-      const anime = animes.find((a) => a.id === item.animeId);
-      return {
-        ...item,
-        animeTitle: anime ? anime.titulo : "Anime no encontrado",
-        animeImage: anime ? anime.imagen : null,
-      };
-    });
-
+    const historial = Array.isArray(user.historial) ? user.historial : [];
+    // Enriquecer historial con título e imagen del anime
+    const historialConDetalles = await Promise.all(
+      historial.map(async (item) => {
+        const anime = await Anime.findByPk(item.animeId);
+        return {
+          ...item,
+          animeTitle: anime ? anime.titulo : "Anime no encontrado",
+          animeImage: anime ? anime.imagen : null,
+        };
+      })
+    );
     res.json(historialConDetalles);
   } catch (error) {
+    console.error('Error al obtener historial:', error);
     res.status(500).json({ error: "Error al obtener historial" });
   }
 });
 
-// POST /historial - Agregar entrada al historial
+// POST /historial - Agregar o actualizar entrada en historial (base de datos)
 app.post("/historial", authenticateToken, async (req, res) => {
   try {
     const { animeId, episodio, progreso } = req.body;
-
     if (!animeId || !episodio || progreso === undefined) {
       return res
         .status(400)
         .json({ error: "animeId, episodio y progreso son requeridos" });
     }
-
-    const users = await readJsonFile("users.json");
-    const userIndex = users.findIndex((u) => u.id === req.user.id);
-
-    if (userIndex === -1) {
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
       return res.status(404).json({ error: "Usuario no encontrado" });
     }
-
-    // Buscar si ya existe una entrada para este anime y episodio
-    const existingIndex = users[userIndex].historial.findIndex(
+    const historial = Array.isArray(user.historial) ? [...user.historial] : [];
+    const existingIndex = historial.findIndex(
       (item) => item.animeId === animeId && item.episodio === episodio
     );
-
     const nuevaEntrada = {
       animeId,
       episodio,
       progreso,
       fechaVisto: new Date().toISOString(),
     };
-
     if (existingIndex !== -1) {
-      // Actualizar entrada existente
-      users[userIndex].historial[existingIndex] = nuevaEntrada;
+      historial[existingIndex] = nuevaEntrada;
     } else {
-      // Agregar nueva entrada
-      users[userIndex].historial.push(nuevaEntrada);
+      historial.unshift(nuevaEntrada);
     }
-
-    await writeJsonFile("users.json", users);
+    // Limitar a 50 registros
+    const limitedHist = historial.slice(0, 50);
+    await user.update({ historial: limitedHist });
     res.json({ message: "Historial actualizado" });
   } catch (error) {
+    console.error('Error al actualizar historial:', error);
     res.status(500).json({ error: "Error al actualizar historial" });
   }
 });
@@ -747,23 +737,90 @@ server.on("error", (error) => {
   console.error("Server error:", error);
 });
 
-// POST /login - Endpoint de login de prueba
-app.post("/login", (req, res) => {
-  const { username } = req.body;
-
-  if (!username) {
-    return res.status(400).json({ error: "Username es requerido" });
+// POST /login - Inicio de sesión contra la base de datos
+app.post("/login", async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username y password son requeridos' });
+    }
+    const user = await User.findOne({ where: { username } });
+    if (!user) {
+      return res.status(401).json({ error: 'Usuario no encontrado' });
+    }
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) {
+      return res.status(401).json({ error: 'Credenciales inválidas' });
+    }
+    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '2h' });
+    return res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Error en login:', error);
+    return res.status(500).json({ error: 'Error interno en login' });
   }
+});
 
-  const token = jwt.sign({ id: 1, username }, JWT_SECRET, { expiresIn: "2h" });
+// POST /registro - Registrar un nuevo usuario
+app.post('/registro', async (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: 'username, email y password son requeridos' });
+    }
 
-  res.json({
-    token,
-    user: {
-      id: 1,
-      username,
-    },
-  });
+    // Verificar duplicados por username o email
+    const exists = await User.findOne({ where: { [Op.or]: [{ username }, { email }] } });
+    if (exists) return res.status(409).json({ error: 'Usuario o email ya existe' });
+
+    // Hashear contraseña con factor de coste configurable
+    const saltRounds = Number(process.env.BCRYPT_ROUNDS || 12);
+    const password_hash = await bcrypt.hash(password, saltRounds);
+
+    // Crear usuario con role 'user' por defecto
+    const user = await User.create({
+      username, 
+      email, 
+      password_hash, 
+      role: 'user',
+      favorites: [], 
+      historial: []
+    });
+
+    // Generar token JWT
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role }, 
+      JWT_SECRET, 
+      { expiresIn: '2h' }
+    );
+
+    return res.json({
+      token,
+      user: { 
+        id: user.id, 
+        username: user.username, 
+        email: user.email, 
+        role: user.role 
+      }
+    });
+  } catch (err) {
+    // Manejo específico de errores SQLite
+    if (err?.original?.code === 'SQLITE_BUSY') {
+      return res.status(503).json({ error: 'Base de datos ocupada, intenta de nuevo' });
+    }
+    if (err?.name === 'SequelizeUniqueConstraintError') {
+      return res.status(409).json({ error: 'Usuario o email ya existe' });
+    }
+    console.error('Error en registro:', err);
+    return res.status(500).json({ error: 'Error interno en registro' });
+  }
 });
 
 // Función para obtener servidores desde LatAnime usando Puppeteer
@@ -855,8 +912,8 @@ async function obtenerServidoresDesdeLatAnime(animeId, episodioId) {
   }
 }
 
-// Ruta para registrar nuevo anime
-app.post('/api/animes/register', authenticateToken, async (req, res) => {
+// Ruta para registrar nuevo anime (solo administradores)
+app.post('/api/animes/register', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const { nombre, sitio } = req.body;
     
@@ -966,8 +1023,8 @@ app.post('/api/animes/register', authenticateToken, async (req, res) => {
 
 
 
-// DELETE /api/animes/:id - Eliminar anime
-app.delete('/api/animes/:id', authenticateToken, async (req, res) => {
+// DELETE /api/animes/:id - Eliminar anime (solo administradores)
+app.delete('/api/animes/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -1003,8 +1060,8 @@ app.delete('/api/animes/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /api/animes/registered - Mejorado para incluir conteo de episodios
-app.get('/api/animes/registered', authenticateToken, async (req, res) => {
+// GET /api/animes/registered - Mejorado para incluir conteo de episodios (solo administradores)
+app.get('/api/animes/registered', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const animes = await Anime.findAll({
       include: [{

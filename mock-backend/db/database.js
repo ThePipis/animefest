@@ -11,7 +11,8 @@ const __dirname = path.dirname(__filename);
 const sequelize = new Sequelize({
   dialect: 'sqlite',
   storage: path.join(__dirname, 'animefest.sqlite'),
-  logging: console.log, // Cambiar de false a console.log para ver errores
+  logging: console.log,
+  pool: { max: 1, min: 0, idle: 10000 }, // ✅ NUEVO: Pool para evitar múltiples conexiones
 });
 
 // Modelo Anime
@@ -129,6 +130,10 @@ export const initDatabase = async () => {
     await sequelize.authenticate();
     console.log('✅ Conexión a SQLite establecida correctamente.');
     
+    // ✅ NUEVO: Configuraciones anti-bloqueo
+    await sequelize.query('PRAGMA journal_mode = WAL;');
+    await sequelize.query('PRAGMA busy_timeout = 5000;'); // 5 segundos de espera si está ocupada
+    
     // Sincronizar modelos (crear tablas si no existen)
     await sequelize.sync({ alter: true });
     console.log('✅ Modelos sincronizados correctamente.');
@@ -142,4 +147,50 @@ export const initDatabase = async () => {
   }
 };
 
-export { sequelize, Anime, Episodio };
+// Nuevo modelo de usuario.
+// Gestiona usuarios con roles y contraseñas hasheadas. Esto reemplaza el uso
+// del archivo users.json. Los campos favorites e historial se dejan como JSON
+// para mantener la compatibilidad con la lógica existente, pero en el futuro
+// pueden migrarse a tablas propias.
+const User = sequelize.define('User', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  username: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true
+  },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true
+  },
+  password_hash: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  role: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'user'
+  },
+  favorites: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    defaultValue: []
+  },
+  historial: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    defaultValue: []
+  }
+}, {
+  tableName: 'users',
+  timestamps: true
+});
+
+// Incluir User en las exportaciones
+export { sequelize, Anime, Episodio, User };
