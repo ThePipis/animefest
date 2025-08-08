@@ -476,25 +476,18 @@ app.get("/reproductor/:animeId/:episodio", authenticateToken, async (req, res) =
       return res.status(404).json({ error: "No se encontraron servidores disponibles" });
     }
 
-    const animes = await readJsonFile("animes.json");
-    const anime = animes.find((a) => {
-      // Buscar por slug extraído de la URL del primer episodio
-      if (a.episodios && a.episodios.length > 0) {
-        const urlStream = a.episodios[0].url_stream;
-        const match = urlStream.match(/\/ver\/(.+)-episodio-\d+$/);
-        const slug = match ? match[1] : '';
-        return slug === animeId;
-      }
-      return false;
-    });
+    // Buscar el anime en la base de datos por slug (alfanumérico) o por id si es numérico
+    const animeRecord = isNaN(Number(animeId))
+      ? await Anime.findOne({ where: { slug: animeId } })
+      : await Anime.findByPk(animeId);
 
-    if (anime) {
+    if (animeRecord) {
       await registrarHistorial(req.user.id, {
-        animeId: anime.id,
+        animeId: animeRecord.id,
         episodio: parseInt(episodio),
         fechaVisto: new Date().toISOString(),
-        animeTitle: anime.titulo,
-        animeImage: anime.imagen,
+        animeTitle: animeRecord.titulo,
+        animeImage: animeRecord.imagen,
         progreso: 0
       });
     }
