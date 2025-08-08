@@ -25,3 +25,4 @@ dist-ssr
 mock-backend/db/*.sqlite
 mock-backend/db/*.sqlite-shm
 mock-backend/db/*.sqlite-wal
+mock-backend/.env
