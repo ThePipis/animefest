@@ -20,6 +20,8 @@ interface AnimeCardProps {
 }
 
 export const AnimeCard: React.FC<AnimeCardProps> = ({ anime, index }) => {
+  const linkTarget = anime.slug ?? anime.id.toString();
+  
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -28,7 +30,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ anime, index }) => {
       whileHover={{ y: -8, scale: 1.02 }}
       className="group cursor-pointer"
     >
-      <Link to={`/anime/${anime.slug}`}>
+      <Link to={`/anime/${linkTarget}`}>
         <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl overflow-hidden border border-dark-700/50 hover:border-primary-500/30 transition-all duration-300">
           <div className="relative">
             <div className="aspect-[3/4] overflow-hidden">

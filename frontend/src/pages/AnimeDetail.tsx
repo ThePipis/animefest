@@ -20,7 +20,7 @@ interface Anime {
   año: number;
   estado: string;
   categoria: string;
-  slug: string; // ← Agregar este campo
+  slug: string;      // ← añadir esta línea
   episodios: Episodio[];
 }
 
@@ -183,7 +183,7 @@ export const AnimeDetail: React.FC = () => {
     if (slug) {
       fetchAnime(); // Carga el anime con api.getAnime(slug)
     }
-  }, [slug, fetchAnime]);
+  }, [slug, fetchAnime, api]);
 
   // ⚠️ useEffect anterior eliminado: ya no usa `id` ni llama a checkFavoriteStatus
   // useEffect(() => {
