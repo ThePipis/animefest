@@ -38,10 +38,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "animefest_secret_key_2024";
 // Inicializar base de datos al arrancar el servidor
 initDatabase().then(() => {
   // Crear usuario admin por defecto
-  createDefaultAdmin().then(() => {
-    // Migrar datos del JSON a la base de datos
-    migrateJsonToDatabase();
-  });
+  createDefaultAdmin();
 });
 
 // Middleware
@@ -67,29 +64,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Función para leer archivos JSON
-const readJsonFile = async (filename) => {
-  try {
-    const filePath = path.join(__dirname, "data", filename);
-    const data = await fs.readFile(filePath, "utf8");
-    return JSON.parse(data);
-  } catch (error) {
-    console.error(`Error reading ${filename}:`, error);
-    return [];
-  }
-};
-
-// Función para escribir archivos JSON
-const writeJsonFile = async (filename, data) => {
-  try {
-    const filePath = path.join(__dirname, "data", filename);
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-    return true;
-  } catch (error) {
-    console.error(`Error writing ${filename}:`, error);
-    return false;
-  }
-};
+// Funciones readJsonFile y writeJsonFile eliminadas - ahora usamos base de datos
 
 // Función para crear usuario admin por defecto
 const createDefaultAdmin = async () => {
@@ -128,72 +103,7 @@ const createDefaultAdmin = async () => {
   }
 };
 
-// Función para migrar datos del archivo JSON a la base de datos
-const migrateJsonToDatabase = async () => {
-  try {
-    console.log('🔄 Verificando si necesita migrar datos del JSON a la base de datos...');
-    
-    // Verificar si ya hay animes en la base de datos
-    const animeCount = await Anime.count();
-    
-    if (animeCount > 0) {
-      console.log(`✅ Base de datos ya tiene ${animeCount} animes. Omitiendo migración.`);
-      return;
-    }
-    
-    console.log('📂 Cargando datos del archivo JSON...');
-    const animesFromJson = await readJsonFile("animes.json");
-    
-    if (!animesFromJson || animesFromJson.length === 0) {
-      console.log('⚠️ No hay datos en el archivo JSON para migrar.');
-      return;
-    }
-    
-    console.log(`🚀 Migrando ${animesFromJson.length} animes del JSON a la base de datos...`);
-    
-    for (const animeData of animesFromJson) {
-      try {
-        // Crear anime en la base de datos
-        const anime = await Anime.create({
-          titulo: animeData.titulo,
-          sinopsis: animeData.sinopsis,
-          imagen: animeData.imagen,
-          generos: animeData.generos || [],
-          año: animeData.año,
-          estado: animeData.estado,
-          idioma: animeData.idioma,
-          categoria: animeData.categoria,
-          sitio_origen: 'latanime',
-          url_origen: `https://latanime.org/anime/${animeData.slug || animeData.id}`,
-          slug: animeData.slug || `anime-${animeData.id}`
-        });
-        
-        // Crear episodios asociados
-        if (animeData.episodios && animeData.episodios.length > 0) {
-          const episodiosData = animeData.episodios.map(ep => ({
-            numero: ep.numero,
-            titulo: ep.titulo,
-            duracion: ep.duracion,
-            url_stream: ep.url_stream,
-            anime_id: anime.id
-          }));
-          
-          await Episodio.bulkCreate(episodiosData);
-        }
-        
-        console.log(`✅ Migrado: ${animeData.titulo} con ${animeData.episodios?.length || 0} episodios`);
-      } catch (animeError) {
-        console.error(`❌ Error migrando anime ${animeData.titulo}:`, animeError.message);
-      }
-    }
-    
-    const finalCount = await Anime.count();
-    console.log(`🎉 Migración completada. Total de animes en la base de datos: ${finalCount}`);
-    
-  } catch (error) {
-    console.error('❌ Error durante la migración:', error);
-  }
-};
+// Función migrateJsonToDatabase eliminada - ya no usamos archivo JSON
 
 // Middleware de autenticación. Extrae el token JWT y busca el usuario en la base de datos.
 // En caso de token inválido o ausencia, responde con 401 en vez de usar un fallback inseguro.
@@ -241,8 +151,21 @@ app.get("/health", (req, res) => {
 // GET /animes - Endpoint para obtener todos los animes (usado por filtros)
 app.get("/animes", async (req, res) => {
   try {
-    const animes = await readJsonFile("animes.json");
-    res.json(animes);
+    const animes = await Anime.findAll({
+      include: [{
+        model: Episodio,
+        as: 'episodios',
+        attributes: ['numero', 'titulo', 'duracion', 'url_stream']
+      }],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    const resultado = animes.map(anime => ({
+      ...anime.toJSON(),
+      episodios: anime.episodios || []
+    }));
+    
+    res.json(resultado);
   } catch (error) {
     console.error("Error fetching animes:", error);
     res.status(500).json({ error: "Error al obtener los animes" });
@@ -655,13 +578,34 @@ app.get('/reproductor/:animeId/:episodioId', authenticateToken, async (req, res)
   const { animeId, episodioId } = req.params;
 
   try {
-    const dataPath = path.join(__dirname, 'data', 'animes.json');
-    const animes = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
+    // Buscar anime en la base de datos
+    let anime;
+    
+    if (isNaN(Number(animeId))) {
+      // Buscar por slug
+      anime = await Anime.findOne({
+        where: { slug: animeId },
+        include: [{
+          model: Episodio,
+          as: 'episodios',
+          attributes: ['numero', 'titulo', 'duracion', 'url_stream']
+        }]
+      });
+    } else {
+      // Buscar por ID numérico
+      anime = await Anime.findByPk(animeId, {
+        include: [{
+          model: Episodio,
+          as: 'episodios',
+          attributes: ['numero', 'titulo', 'duracion', 'url_stream']
+        }]
+      });
+    }
 
-    const anime = animes.find(a => a.id === animeId);
     if (!anime) return res.status(404).json({ error: 'Anime no encontrado' });
 
-    const episodio = anime.episodios.find(e => e.id == episodioId);
+    // Buscar episodio específico
+    const episodio = anime.episodios.find(e => e.numero === parseInt(episodioId));
     if (!episodio) return res.status(404).json({ error: 'Episodio no encontrado' });
 
     // Simulamos múltiples servidores en base a la URL original
