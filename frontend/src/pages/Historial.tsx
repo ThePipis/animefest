@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useApi } from '../hooks/useApi';
@@ -10,6 +10,7 @@ interface HistorialItem {
   fechaVisto: string;
   animeTitle: string;
   animeImage: string;
+  animeSlug: string;
 }
 
 export const Historial: React.FC = () => {
@@ -19,11 +20,7 @@ export const Historial: React.FC = () => {
   
   const api = useApi();
 
-  useEffect(() => {
-    fetchHistorial();
-  }, []);
-
-  const fetchHistorial = async () => {
+  const fetchHistorial = useCallback(async () => {
     setLoading(true);
     setError('');
     
@@ -32,19 +29,24 @@ export const Historial: React.FC = () => {
       
       if (response.error) {
         setError(response.error);
-      } else if (response.data) {
+      } else if (response.data && Array.isArray(response.data)) {
         // Ordenar por fecha más reciente
-        const sortedHistorial = response.data.sort((a: HistorialItem, b: HistorialItem) => 
+        const historialData = response.data as HistorialItem[];
+        const sortedHistorial = historialData.sort((a: HistorialItem, b: HistorialItem) =>
           new Date(b.fechaVisto).getTime() - new Date(a.fechaVisto).getTime()
         );
         setHistorial(sortedHistorial);
       }
-    } catch (err) {
+    } catch {
       setError('Error al cargar historial');
     } finally {
       setLoading(false);
     }
-  };
+  }, [api]);
+
+  useEffect(() => {
+    fetchHistorial();
+  }, [fetchHistorial]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -221,13 +223,13 @@ export const Historial: React.FC = () => {
                     {/* Acciones */}
                     <div className="flex-shrink-0 flex flex-col space-y-2">
                       <Link
-                        to={`/watch/${item.animeId}/${item.episodio}`}
+                        to={`/watch/${item.animeSlug || item.animeId}/${item.episodio}`}
                         className="btn-primary text-sm"
                       >
                         {item.progreso >= 90 ? 'Ver de nuevo' : 'Continuar'}
                       </Link>
                       <Link
-                        to={`/anime/${item.animeId}`}
+                        to={`/anime/${item.animeSlug || item.animeId}`}
                         className="btn-secondary text-sm"
                       >
                         Ver anime

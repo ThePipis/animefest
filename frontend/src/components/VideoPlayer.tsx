@@ -61,7 +61,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         console.log('✅ Stream HLS cargado correctamente');
       });
       
-      hls.on(Hls.Events.ERROR, (event, data) => {
+      hls.on(Hls.Events.ERROR, (_, data) => {
         console.error('❌ Error HLS:', data);
         if (data.fatal) {
           setError('Error cargando el video. Intenta con otro servidor.');
@@ -105,7 +105,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         hlsRef.current.destroy();
       }
     };
-  }, [src, tipo]);
+  }, [src, tipo, onTimeUpdate]);
 
   // ✅ Renderizado condicional para evitar errores
   if (!src) {

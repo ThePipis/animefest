@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { AnimeCard } from '../components/AnimeCard';
 import { useApi } from '../hooks/useApi';
@@ -12,6 +12,7 @@ interface Anime {
   año: number;
   estado: string;
   categoria: string;
+  slug: string;
 }
 
 export const Favoritos: React.FC = () => {
@@ -21,11 +22,7 @@ export const Favoritos: React.FC = () => {
   
   const api = useApi();
 
-  useEffect(() => {
-    fetchFavoritos();
-  }, []);
-
-  const fetchFavoritos = async () => {
+  const fetchFavoritos = useCallback(async () => {
     setLoading(true);
     setError('');
     
@@ -34,15 +31,19 @@ export const Favoritos: React.FC = () => {
       
       if (response.error) {
         setError(response.error);
-      } else if (response.data) {
-        setFavoritos(response.data);
+      } else if (response.data && Array.isArray(response.data)) {
+        setFavoritos(response.data as Anime[]);
       }
-    } catch (err) {
+    } catch {
       setError('Error al cargar favoritos');
     } finally {
       setLoading(false);
     }
-  };
+  }, [api]);
+
+  useEffect(() => {
+    fetchFavoritos();
+  }, [fetchFavoritos]);
 
   if (loading) {
     return (

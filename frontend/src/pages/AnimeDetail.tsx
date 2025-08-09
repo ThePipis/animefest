@@ -147,6 +147,12 @@ export const AnimeDetail: React.FC = () => {
     }
   }, [api, slug]);
 
+  useEffect(() => {
+    if (slug) {
+      fetchAnime();
+    }
+  }, [fetchAnime, slug]);
+
   // ⚠️ Función eliminada: checkFavoriteStatus ya no se usa y hacía referencia a `id`
   // const checkFavoriteStatus = useCallback(async () => {
   //   try {
@@ -167,8 +173,8 @@ export const AnimeDetail: React.FC = () => {
         try {
           const favResp = await api.getFavoritos();
           if (favResp.data && Array.isArray(favResp.data)) {
-            const favoriteIds = favResp.data.map((fav: { id: number }) => fav.id);
-            setIsFavorite(favoriteIds.includes(anime.id));
+            const favoriteSlugs = favResp.data.map((fav: { slug: string }) => fav.slug);
+            setIsFavorite(favoriteSlugs.includes(anime.slug));
           }
         } catch (err) {
           console.error('Error checking favorite status:', err);
@@ -176,55 +182,9 @@ export const AnimeDetail: React.FC = () => {
       };
       fetchFavs();
     }
-  }, [anime, isAuthenticated]);
+  }, [anime, isAuthenticated, api]);
 
-  // Usar el parámetro `slug` en lugar de `id`
-  useEffect(() => {
-    if (slug) {
-      fetchAnime(); // Carga el anime con api.getAnime(slug)
-    }
-  }, [slug, fetchAnime, api]);
-
-  // ⚠️ useEffect anterior eliminado: ya no usa `id` ni llama a checkFavoriteStatus
-  // useEffect(() => {
-  //   if (id) {
-  //     fetchAnime();
-  //     if (isAuthenticated) {
-  //       checkFavoriteStatus();
-  //     }
-  //   }
-  // }, [id, isAuthenticated, fetchAnime, checkFavoriteStatus]);
-
-  // Nuevo useEffect para scroll automático al cargar la página
-  useEffect(() => {
-    if (anime && !loading) {
-      // Esperar un poco para que el DOM se renderice completamente
-      const timer = setTimeout(() => {
-        // Buscar el elemento del título del anime
-        const titleSection = document.querySelector('h1');
-        if (titleSection) {
-          // Calcular la posición considerando el botón de favoritos que está arriba
-          const favoriteButton = document.querySelector('button[disabled]') || document.querySelector('button');
-          let scrollPosition = titleSection.offsetTop;
-          
-          // Si hay botón de favoritos, ajustar la posición para incluirlo en la vista
-          if (favoriteButton && favoriteButton.closest('.card')) {
-            const card = favoriteButton.closest('.card') as HTMLElement;
-            scrollPosition = Math.max(0, card.offsetTop - 20); // 20px de margen superior
-          }
-          
-          // Hacer scroll suave a la posición calculada
-          window.scrollTo({
-            top: scrollPosition,
-            behavior: 'smooth'
-          });
-        }
-      }, 500); // Esperar 500ms para que las animaciones terminen
-      
-      return () => clearTimeout(timer);
-    }
-  }, [anime, loading]); // Se ejecuta cuando el anime se carga
-
+  // Cambiar toggleFavorite para usar slug
   const toggleFavorite = async () => {
     if (!isAuthenticated || !anime) return;
     
@@ -232,10 +192,10 @@ export const AnimeDetail: React.FC = () => {
     
     try {
       if (isFavorite) {
-        await api.removeFavorito(anime.id);
+        await api.removeFavorito(anime.slug); // ← Usar slug
         setIsFavorite(false);
       } else {
-        await api.addFavorito(anime.id);
+        await api.addFavorito(anime.slug); // ← Usar slug
         setIsFavorite(true);
       }
     } catch (err) {

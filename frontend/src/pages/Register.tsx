@@ -37,8 +37,8 @@ export const Register: React.FC = () => {
 
     const result = await register(username, email, password);
     
-    if (!result.success) {
-      setError(result.error || 'Error en el registro');
+    if (!result?.success) {
+      setError(result?.error || 'Error en el registro');
     }
     
     setLoading(false);

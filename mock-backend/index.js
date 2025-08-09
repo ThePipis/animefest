@@ -600,8 +600,8 @@ app.get("/favoritos", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
     const favorites = user.favorites || [];
-    // Obtener animes usando Sequelize
-    const animes = await Anime.findAll({ where: { id: favorites } });
+    // Buscar animes por slug en lugar de ID
+    const animes = await Anime.findAll({ where: { slug: favorites } });
     return res.json(animes);
   } catch (error) {
     console.error('Error al obtener favoritos:', error);
@@ -612,17 +612,17 @@ app.get("/favoritos", authenticateToken, async (req, res) => {
 // POST /favoritos - Agregar anime a favoritos (base de datos)
 app.post("/favoritos", authenticateToken, async (req, res) => {
   try {
-    const { animeId } = req.body;
-    if (!animeId) {
-      return res.status(400).json({ error: 'animeId es requerido' });
+    const { animeSlug } = req.body;
+    if (!animeSlug) {
+      return res.status(400).json({ error: 'animeSlug es requerido' });
     }
     const user = await User.findByPk(req.user.id);
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
     const favs = Array.isArray(user.favorites) ? [...user.favorites] : [];
-    if (!favs.includes(animeId)) {
-      favs.push(animeId);
+    if (!favs.includes(animeSlug)) {
+      favs.push(animeSlug);
       await user.update({ favorites: favs });
     }
     return res.json({ message: 'Anime agregado a favoritos' });
@@ -632,16 +632,16 @@ app.post("/favoritos", authenticateToken, async (req, res) => {
   }
 });
 
-// DELETE /favoritos/:id - Quitar anime de favoritos (base de datos)
-app.delete("/favoritos/:id", authenticateToken, async (req, res) => {
+// DELETE /favoritos/:slug - Quitar anime de favoritos (base de datos)
+app.delete("/favoritos/:slug", authenticateToken, async (req, res) => {
   try {
-    const animeId = parseInt(req.params.id);
+    const animeSlug = req.params.slug;
     const user = await User.findByPk(req.user.id);
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
     const favs = Array.isArray(user.favorites) ? [...user.favorites] : [];
-    const newFavs = favs.filter((id) => id !== animeId);
+    const newFavs = favs.filter((slug) => slug !== animeSlug);
     await user.update({ favorites: newFavs });
     return res.json({ message: 'Anime removido de favoritos' });
   } catch (error) {

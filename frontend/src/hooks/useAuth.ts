@@ -1,6 +1,9 @@
-import { useAuthStore } from '../stores/authStore';
-import { useApi } from './useApi';
 import { useNavigate } from 'react-router-dom';
+
+import { useAuthStore } from '../stores/authStore';
+import type { User } from '../types/types';
+
+import { useApi } from './useApi';
 
 export const useAuth = () => {
   const { user, token, isAuthenticated, login, logout, setUser } = useAuthStore();
@@ -20,7 +23,12 @@ export const useAuth = () => {
 
       if (response.data) {
         console.log('Login successful, storing data');
-        login(response.data.token, response.data.user);
+        // Asegurar que el usuario tenga el campo role
+        const userWithRole = {
+          ...response.data.user,
+          role: response.data.user.role || 'user'
+        };
+        login(response.data.token, userWithRole);
         navigate('/');
         return { success: true };
       }
@@ -44,10 +52,17 @@ export const useAuth = () => {
       }
 
       if (response.data) {
-        login(response.data.token, response.data.user);
+        // Asegurar que el usuario tenga el campo role
+        const userWithRole = {
+          ...response.data.user,
+          role: response.data.user.role || 'user'
+        };
+        login(response.data.token, userWithRole);
         navigate('/');
         return { success: true };
       }
+      
+      return { success: false, error: 'No data received' };
     } catch (error) {
       return { 
         success: false, 
@@ -66,8 +81,17 @@ export const useAuth = () => {
 
     try {
       const response = await api.getUser();
-      if (response.data) {
-        setUser(response.data);
+      if (response.data && typeof response.data === 'object' && 'id' in response.data) {
+        const userData = response.data as Partial<User>;
+        if (userData.id && userData.username && userData.email) {
+          const userWithRole: User = {
+            id: userData.id,
+            username: userData.username,
+            email: userData.email,
+            role: userData.role || 'user'
+          };
+          setUser(userWithRole);
+        }
       }
     } catch (error) {
       console.error('Error updating user:', error);

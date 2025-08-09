@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { VideoPlayer } from '../components/VideoPlayer';
@@ -9,6 +9,7 @@ interface StreamData {
   titulo: string;
   anime: string;
   episodio: number;
+  tipo: string;
 }
 
 interface Anime {
@@ -22,7 +23,7 @@ interface Anime {
 }
 
 export const Watch: React.FC = () => {
-  const { animeId, episodio } = useParams<{ animeId: string; episodio: string }>();
+  const { slug, episodio } = useParams<{ slug: string; episodio: string }>();
   const [streamData, setStreamData] = useState<StreamData | null>(null);
   const [animeData, setAnimeData] = useState<Anime | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,69 +32,73 @@ export const Watch: React.FC = () => {
   const api = useApi();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (animeId && episodio) {
-      fetchStreamData();
-      fetchAnimeData();
-    }
-  }, [animeId, episodio]);
-
-  const fetchStreamData = async () => {
+  // Memoizar las funciones para evitar renders innecesarios
+  const fetchStreamData = useCallback(async () => {
     setLoading(true);
     setError('');
     
     try {
-      const response = await api.getStream(parseInt(animeId!), parseInt(episodio!));
+      const response = await api.getStream(slug!, parseInt(episodio!));
       
       if (response.error) {
         setError(response.error);
       } else if (response.data) {
-        setStreamData(response.data);
+        setStreamData(response.data as StreamData);
       }
-    } catch (err) {
+    } catch {
       setError('Error al cargar el stream');
     } finally {
       setLoading(false);
     }
-  };
+  }, [api, slug, episodio]);
 
-  const fetchAnimeData = async () => {
+  const fetchAnimeData = useCallback(async () => {
     try {
-      const response = await api.getAnime(parseInt(animeId!));
+      const response = await api.getAnime(slug!);
       if (response.data) {
-        setAnimeData(response.data);
+        setAnimeData(response.data as Anime);
       }
     } catch (err) {
       console.error('Error fetching anime data:', err);
     }
-  };
+  }, [api, slug]);
 
-  const handleProgress = async (progress: number) => {
-    // Guardar progreso en el historial
-    try {
-      await api.addHistorial(parseInt(animeId!), parseInt(episodio!), progress);
-    } catch (err) {
-      console.error('Error saving progress:', err);
+  useEffect(() => {
+    if (slug && episodio) {
+      fetchStreamData();
+      fetchAnimeData();
     }
-  };
+  }, [slug, episodio, fetchStreamData, fetchAnimeData]);
 
-  const handleVideoEnded = () => {
-    // Marcar como completado (100% de progreso)
-    handleProgress(100);
+
+  const handleTimeUpdate = async (currentTime: number, duration: number) => {
+    // Calcular el progreso como porcentaje
+    const progress = Math.round((currentTime / duration) * 100);
     
-    // Navegar al siguiente episodio si existe
-    if (animeData) {
+    // Guardar progreso cada cierto porcentaje para evitar muchas requests
+    if (progress > 0 && progress % 10 === 0) {
+      try {
+        await api.addHistorial(slug!, parseInt(episodio!), progress);
+      } catch (err) {
+        console.error('Error saving progress:', err);
+      }
+    }
+    
+    // Si el video está casi terminado (>90%), navegar al siguiente episodio
+    if (progress > 90 && animeData) {
       const currentEp = parseInt(episodio!);
       const nextEpisode = animeData.episodios.find(ep => ep.numero === currentEp + 1);
       
       if (nextEpisode) {
-        navigate(`/watch/${animeId}/${nextEpisode.numero}`);
+        // Marcar como completado antes de navegar
+        await api.addHistorial(slug!, parseInt(episodio!), 100);
+        navigate(`/watch/${slug}/${nextEpisode.numero}`);
       }
     }
   };
 
   const navigateToEpisode = (episodeNumber: number) => {
-    navigate(`/watch/${animeId}/${episodeNumber}`);
+    navigate(`/watch/${slug}/${episodeNumber}`);
   };
 
   if (loading) {
@@ -122,7 +127,7 @@ export const Watch: React.FC = () => {
           <div className="text-red-400 text-6xl mb-4">⚠️</div>
           <h2 className="text-2xl font-bold text-white mb-2">Error de reproducción</h2>
           <p className="text-dark-400 mb-4">{error}</p>
-          <Link to={`/anime/${animeId}`} className="btn-primary">
+          <Link to={`/anime/${slug}`} className="btn-primary">
             Volver al anime
           </Link>
         </motion.div>
@@ -144,8 +149,8 @@ export const Watch: React.FC = () => {
               Catálogo
             </Link>
             <span className="text-dark-400">→</span>
-            <Link 
-              to={`/anime/${animeId}`} 
+            <Link
+              to={`/anime/${slug}`}
               className="text-primary-400 hover:text-primary-300 transition-colors"
             >
               {streamData.anime}
@@ -165,9 +170,9 @@ export const Watch: React.FC = () => {
           >
             <VideoPlayer
               src={streamData.url}
-              title={`${streamData.anime} - Episodio ${streamData.episodio}: ${streamData.titulo}`}
-              onProgress={handleProgress}
-              onEnded={handleVideoEnded}
+              tipo={streamData.tipo}
+              titulo={`${streamData.anime} - Episodio ${streamData.episodio}: ${streamData.titulo}`}
+              onTimeUpdate={handleTimeUpdate}
             />
           </motion.div>
 
@@ -231,7 +236,7 @@ export const Watch: React.FC = () => {
                 )}
                 
                 <Link
-                  to={`/anime/${animeId}`}
+                  to={`/anime/${slug}`}
                   className="w-full btn-secondary text-sm block text-center"
                 >
                   Ver detalles del anime

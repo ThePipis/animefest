@@ -7,28 +7,33 @@
     "module": "ESNext",
     "skipLibCheck": true,
 
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "moduleDetection": "force",
+    /* Module resolution */
+    "moduleResolution": "node",
+    "allowImportingTsExtensions": false,
+    "verbatimModuleSyntax": false,
+    "moduleDetection": "auto",
     "noEmit": true,
     "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
 
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true,
     
-    /* Añadidos para alias */
+    /* Path mapping */
     "baseUrl": "./src",
     "paths": {
       "@/*": ["*"],
       "@types/*": ["types/*"]
-    }
+    },
+    
+    /* Additional options */
+    "resolveJsonModule": true,
+    "isolatedModules": true
   },
   "include": ["src"]
 }

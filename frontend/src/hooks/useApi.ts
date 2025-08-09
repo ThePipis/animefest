@@ -120,8 +120,8 @@ export const useApi = () => {
     getAnime: (identifier: string | number) => apiClient.get(`/anime/${identifier}`),
 
     // Stream
-    getStream: (animeId: number, episodio: number) =>
-      apiClient.get(`/reproducir?animeId=${animeId}&episodio=${episodio}`),
+    getStream: (animeSlug: string, episodio: number) =>
+      apiClient.get(`/reproducir?animeSlug=${animeSlug}&episodio=${episodio}`),
 
     // Autenticación
     login: (username: string, password: string) =>
@@ -134,12 +134,12 @@ export const useApi = () => {
 
     // Favoritos
     getFavoritos: () => apiClient.get('/favoritos'),
-    addFavorito: (animeId: number) => apiClient.post('/favoritos', { animeId }),
-    removeFavorito: (animeId: number) => apiClient.delete(`/favoritos/${animeId}`),
+    addFavorito: (slug: string) => apiClient.post('/favoritos', { animeSlug: slug }),
+    removeFavorito: (slug: string) => apiClient.delete(`/favoritos/${slug}`),
 
     // Historial
     getHistorial: () => apiClient.get('/historial'),
-    addHistorial: (animeId: number, episodio: number, progreso: number) =>
-      apiClient.post('/historial', { animeId, episodio, progreso }),
+    addHistorial: (animeSlug: string, episodio: number, progreso: number) =>
+      apiClient.post('/historial', { animeSlug, episodio, progreso }),
   }), []);
 };
