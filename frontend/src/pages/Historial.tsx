@@ -223,13 +223,13 @@ export const Historial: React.FC = () => {
                     {/* Acciones */}
                     <div className="flex-shrink-0 flex flex-col space-y-2">
                       <Link
-                        to={`/watch/${item.animeSlug || item.animeId}/${item.episodio}`}
+                        to={`/watch/${item.animeSlug}/${item.episodio}`}
                         className="btn-primary text-sm"
                       >
                         {item.progreso >= 90 ? 'Ver de nuevo' : 'Continuar'}
                       </Link>
                       <Link
-                        to={`/anime/${item.animeSlug || item.animeId}`}
+                        to={`/anime/${item.animeSlug}`}
                         className="btn-secondary text-sm"
                       >
                         Ver anime

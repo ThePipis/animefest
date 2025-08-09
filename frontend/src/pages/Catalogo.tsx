@@ -16,6 +16,7 @@ interface Anime {
   estado: string;
   categoria: string;
   idioma: string;
+  slug: string;
 }
 
 interface FilterState {
@@ -162,8 +163,8 @@ export const Catalogo: React.FC = () => {
     }
   });
 
-  const handleAnimeClick = (animeId: number) => {
-    navigate(`/anime/${animeId}`);
+  const handleAnimeClick = (anime: Anime) => {
+    navigate(`/anime/${anime.slug || anime.id}`);
   };
   // ⬇️ Aquí insertas el TestPlayer
   <TestPlayer />
@@ -219,7 +220,7 @@ export const Catalogo: React.FC = () => {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3 }}
-                  onClick={() => handleAnimeClick(anime.id)}
+                  onClick={() => handleAnimeClick(anime)}
                   className="group cursor-pointer"
                 >
                   <div className="bg-dark-800 rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105 relative">

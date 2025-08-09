@@ -2,6 +2,7 @@
   {
     "id": 1,
     "titulo": "Kanojo, Okarishimasu S4 Latino",
+    "slug": "kanojo-okarishimasu-s4-latino",
     "sinopsis": "Kazuya toma una decisión: declararse a Chizuru, aunque la existencia de Mami supone otro problema. Mami-chan besto personaje.",
     "imagen": "https://latanime.org/thumbs/imagen/kanojo-okarishimasu-s4-latino-1753213744.jpg",
     "generos": ["Comedia", "Harem", "Shonen", "Romance"],
@@ -27,6 +28,7 @@
   {
     "id": 2,
     "titulo": "Dandadan Netflix Latino",
+    "slug": "dandadan-latino",
     "sinopsis": "Oculto, un friki que cree en los ovnis, y Ayase, su compañera criada por una abuela médium, vivirán una historia que les hará cuestionarse todo lo que han creído hasta el momento.",
     "imagen": "https://latanime.org/thumbs/imagen/dandadan-latino-1753129192.jpg",
     "generos": ["Acción", "Comedia", "Shonen"],
@@ -70,6 +72,7 @@
   {
     "id": 3,
     "titulo": "Oshi no Ko S2 Castellano",
+    "slug": "oshi-no-ko-s2-castellano",
     "sinopsis": "Con la ayuda del productor Masaya Kaburagi, Aquamarine 'Aqua' Hoshino y Kana Arima han conseguido los papeles de Touki y Tsurugi en la adaptación teatral de la popular serie de manga Tokyo Blade.",
     "imagen": "https://latanime.org/thumbs/imagen/oshi-no-ko-s2-castellano-1752755325.jpg",
     "generos": ["Drama", "Música", "Seinen", "Sobrenatural", "Romance"],
@@ -113,6 +116,7 @@
   {
     "id": 4,
     "titulo": "Tate no Yuusha no Nariagari S4 Latino",
+    "slug": "tate-no-yuusha-no-nariagari-s4-latino",
     "sinopsis": "Naofumi se prepara para entrar a Siltvelt acompañado por Raphtalia, Filo, Sadeena, Atla y Fohl.",
     "imagen": "https://latanime.org/thumbs/imagen/tate-no-yuusha-no-nariagari-s4-latino-1752706090.jpg",
     "generos": ["Acción", "Aventura", "Drama", "Fantasía"],
@@ -138,6 +142,7 @@
   {
     "id": 5,
     "titulo": "New PANTY & STOCKING Latino",
+    "slug": "new-panty-stocking-latino",
     "sinopsis": "En Ciudad Daten, entre el cielo y el infierno, hay fantasmas que se alimentan de los deseos y el rencor de la humanidad. Aparecen dos figuras para destruirlos con su luz divina: Panty y Stocking.",
     "imagen": "https://latanime.org/thumbs/imagen/new-panty-stocking-latino-1752078368.jpg",
     "generos": ["Acción", "Comedia", "Ecchi", "Fantasía", "Parodias"],
@@ -169,6 +174,7 @@
   {
     "id": 6,
     "titulo": "Tougen Anki Latino",
+    "slug": "tougen-anki-latino",
     "sinopsis": "Los linajes de 'Oni' y 'Momotaro' se han transmitido entre ciertos humanos durante generaciones. El protagonista, Shiki Ichinose, se entera de repente de su linaje Oni después de un ataque inesperado de Momotaro.",
     "imagen": "https://latanime.org/thumbs/imagen/tougen-anki-latino-1752259137.jpg",
     "generos": ["Acción", "Fantasía", "Shonen"],
@@ -200,6 +206,7 @@
   {
     "id": 7,
     "titulo": "Gachiakuta Latino",
+    "slug": "gachiakuta",
     "sinopsis": "En una ciudad flotante donde los ricos se deshacen de su basura y de las personas, a Ludo lo acusan de asesinato y lo arrojan al Abismo, un infierno habitado por las bestias de la basura.",
     "imagen": "https://latanime.org/thumbs/imagen/gachiakuta-1751833158.jpg",
     "generos": ["Acción", "Fantasía", "Shonen"],
@@ -231,6 +238,7 @@
   {
     "id": 8,
     "titulo": "Clevatess Latino",
+    "slug": "clevatess-latino",
     "sinopsis": "El reinado de Clevatess, uno de los Señores de las Bestias Mágicas, se desmorona al revivir a un héroe al que él mismo mató y adoptar a un bebé humanoide huérfano: la última esperanza para salvar un mundo moribundo.",
     "imagen": "https://latanime.org/thumbs/imagen/clevatess-latino-1751481889.jpg",
     "generos": ["Acción", "Aventura", "Ciencia Ficción", "Drama", "Fantasía"],
@@ -268,6 +276,7 @@
   {
     "id": 9,
     "titulo": "Kaijuu 8-gou S2 Latino",
+    "slug": "kaijuu-8-gou-s2-latino",
     "sinopsis": "Gracias a Isao Shinomiya, Kafka Hibino evita convertirse en un arma. Mientras los nuevos reclutas se dirigen a sus puestos, Kafka conoce al general Narumi, el hombre más fuerte en la fuerza de defensa.",
     "imagen": "https://latanime.org/thumbs/imagen/kaijuu-8-gou-s2-latino-1752370535.jpg",
     "generos": ["Acción", "Fantasía", "Militar", "Shonen"],
@@ -299,6 +308,7 @@
   {
     "id": 10,
     "titulo": "Witch Watch Latino",
+    "slug": "witch-watch",
     "sinopsis": "Nico Wakatsuki ha terminado sus seis años de entrenamiento de bruja y regresa sola a la ciudad. Como bruja nueva, debe elegir un familiar que la acompañe.",
     "imagen": "https://latanime.org/thumbs/imagen/witch-watch-1745782522.jpg",
     "generos": ["Comedia", "Shonen", "Sobrenatural"],
@@ -342,6 +352,7 @@
   {
     "id": 11,
     "titulo": "Sakura Card Captor Castellano",
+    "slug": "sakura-card-captor-castellano",
     "sinopsis": "Sakura Kinomoto es una niña de 10 años que vive con su padre Fujitaka y su hermano Touya. La historia comienza cuando Sakura abre un extraño libro llamado The Clow y libera accidentalmente las cartas que este contenía, Sakura deberá pasar grandes apuros para sellar las cartas pero con ayuda de sus amigos Tomoyo, Shaoran y Kerberos vivirían grandes aventuras para lograr su objetivo, atrapar todas las cartas Clow.",
     "imagen": "https://latanime.org/thumbs/imagen/sakura-card-captor-castellano-1677455558.jpg",
     "generos": ["Acción", "Comedia", "Drama", "Escolares", "Magia", "Romance"],
@@ -775,6 +786,7 @@
   {
     "id": 12,
     "titulo": "Overlord: The Sacred Kingdom",
+    "slug": "overlord-the-sacred-kingdom",
     "sinopsis": "El Reino Sagrado ha disfrutado de muchos años sin guerras gracias a una colosal muralla construida tras una tragedia histórica. Ellos entienden mejor que nadie lo frágil que puede ser la paz. Cuando el terrible demonio Jaldabaoth sale al campo de batalla al frente de un ejército unido de tribus monstruosas, los líderes del Reino Sagrado saben que sus defensas no son suficientes. Con la existencia misma del país en juego, los piadosos no tienen más remedio que buscar ayuda dondequiera que puedan conseguirla, ¡incluso si eso significa romper el tabú y parlamentar con el rey no muerto de la Nación de la Oscuridad!",
     "imagen": "https://latanime.org/thumbs/imagen/overlord-the-sacred-kingdom-1743473199.jpg?v=1.5",
     "generos": ["Acción", "Aventura", "Fantasía"],
@@ -794,6 +806,7 @@
   {
     "id": 13,
     "titulo": "Mi GRAN Jefe Latino",
+    "slug": "mi-gran-jefe-latino",
     "sinopsis": "¡Si necesitas tallas XL, las encontrarás aquí! Por recomendación, Saki Watase se convierte en probadora de productos para reseñar su calidad y ganar algo de dinero extra. Sin embargo, termina recibiendo unos curiosos artículos de tamaño extra grande y, sin tener pareja, se siente incapaz de hacer algo al respecto. Después de asistir a una reunión con sus compañeros de trabajo, su temible jefe, Keisuke Sudo, la lleva a su apartamento tras beber demasiado. En el lugar, Sudo descubre una gran cantidad de eso y ofrece su ayuda con la prueba. Mi GRAN Jefe y yo probando productos XL... eso es mentira, ¿verdad?",
     "imagen": "https://latanime.org/thumbs/imagen/mi-gran-jefe-latino-1719285252.jpg?v=1.5",
     "generos": ["Ecchi", "Josei", "Romance"],

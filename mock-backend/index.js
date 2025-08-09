@@ -36,7 +36,13 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
 const JWT_SECRET = process.env.JWT_SECRET || "animefest_secret_key_2024";
 
 // Inicializar base de datos al arrancar el servidor
-initDatabase();
+initDatabase().then(() => {
+  // Crear usuario admin por defecto
+  createDefaultAdmin().then(() => {
+    // Migrar datos del JSON a la base de datos
+    migrateJsonToDatabase();
+  });
+});
 
 // Middleware
 app.use(
@@ -82,6 +88,110 @@ const writeJsonFile = async (filename, data) => {
   } catch (error) {
     console.error(`Error writing ${filename}:`, error);
     return false;
+  }
+};
+
+// Función para crear usuario admin por defecto
+const createDefaultAdmin = async () => {
+  try {
+    console.log('🔄 Verificando si existe usuario admin...');
+    
+    // Verificar si ya existe el usuario admin
+    const adminExists = await User.findOne({ where: { username: 'admin' } });
+    
+    if (adminExists) {
+      console.log('✅ Usuario admin ya existe. Omitiendo creación.');
+      return;
+    }
+    
+    console.log('👤 Creando usuario admin por defecto...');
+    
+    // Hashear la contraseña admin123
+    const saltRounds = 12;
+    const password_hash = await bcrypt.hash('admin123', saltRounds);
+    
+    // Crear usuario admin
+    await User.create({
+      username: 'admin',
+      email: 'admin@animefest.com',
+      password_hash: password_hash,
+      role: 'admin',
+      favorites: [],
+      historial: []
+    });
+    
+    console.log('✅ Usuario admin creado correctamente');
+    console.log('📋 Credenciales: admin / admin123');
+    
+  } catch (error) {
+    console.error('❌ Error al crear usuario admin:', error);
+  }
+};
+
+// Función para migrar datos del archivo JSON a la base de datos
+const migrateJsonToDatabase = async () => {
+  try {
+    console.log('🔄 Verificando si necesita migrar datos del JSON a la base de datos...');
+    
+    // Verificar si ya hay animes en la base de datos
+    const animeCount = await Anime.count();
+    
+    if (animeCount > 0) {
+      console.log(`✅ Base de datos ya tiene ${animeCount} animes. Omitiendo migración.`);
+      return;
+    }
+    
+    console.log('📂 Cargando datos del archivo JSON...');
+    const animesFromJson = await readJsonFile("animes.json");
+    
+    if (!animesFromJson || animesFromJson.length === 0) {
+      console.log('⚠️ No hay datos en el archivo JSON para migrar.');
+      return;
+    }
+    
+    console.log(`🚀 Migrando ${animesFromJson.length} animes del JSON a la base de datos...`);
+    
+    for (const animeData of animesFromJson) {
+      try {
+        // Crear anime en la base de datos
+        const anime = await Anime.create({
+          titulo: animeData.titulo,
+          sinopsis: animeData.sinopsis,
+          imagen: animeData.imagen,
+          generos: animeData.generos || [],
+          año: animeData.año,
+          estado: animeData.estado,
+          idioma: animeData.idioma,
+          categoria: animeData.categoria,
+          sitio_origen: 'latanime',
+          url_origen: `https://latanime.org/anime/${animeData.slug || animeData.id}`,
+          slug: animeData.slug || `anime-${animeData.id}`
+        });
+        
+        // Crear episodios asociados
+        if (animeData.episodios && animeData.episodios.length > 0) {
+          const episodiosData = animeData.episodios.map(ep => ({
+            numero: ep.numero,
+            titulo: ep.titulo,
+            duracion: ep.duracion,
+            url_stream: ep.url_stream,
+            anime_id: anime.id
+          }));
+          
+          await Episodio.bulkCreate(episodiosData);
+        }
+        
+        console.log(`✅ Migrado: ${animeData.titulo} con ${animeData.episodios?.length || 0} episodios`);
+      } catch (animeError) {
+        console.error(`❌ Error migrando anime ${animeData.titulo}:`, animeError.message);
+      }
+    }
+    
+    const finalCount = await Anime.count();
+    console.log(`🎉 Migración completada. Total de animes en la base de datos: ${finalCount}`);
+    
+  } catch (error) {
+    console.error('❌ Error durante la migración:', error);
   }
 };
 
@@ -255,25 +365,42 @@ app.get("/anime/:identifier", async (req, res) => {
   }
 });
 
-// GET /reproducir - Endpoint mejorado con scraping automático
+// GET /reproducir - Endpoint mejorado con scraping automático (ACTUALIZADO para manejar slugs)
 app.get("/reproducir", authenticateToken, async (req, res) => {
   try {
-    const { id, episodio } = req.query;
+    const { animeSlug, episodio } = req.query;
 
     // Validar parámetros
-    if (!id || !episodio) {
+    if (!animeSlug || !episodio) {
       return res.status(400).json({
-        error: "Los parámetros 'id' y 'episodio' son requeridos",
+        error: "Los parámetros 'animeSlug' y 'episodio' son requeridos",
       });
     }
 
     console.log(
-      `🎬 Solicitud de reproducción - Anime ID: ${id}, Episodio: ${episodio}`
+      `🎬 Solicitud de reproducción - Anime Slug: ${animeSlug}, Episodio: ${episodio}`
     );
 
-    // Buscar anime en la base de datos
-    const animes = await readJsonFile("animes.json");
-    const anime = animes.find((a) => a.id === parseInt(id));
+    // Buscar anime en la base de datos por slug
+    let anime = await Anime.findOne({
+      where: { slug: animeSlug },
+      include: [{
+        model: Episodio,
+        as: 'episodios',
+        attributes: ['numero', 'titulo', 'duracion', 'url_stream']
+      }]
+    });
+
+    // Si no se encuentra por slug, intentar por ID (fallback)
+    if (!anime && !isNaN(Number(animeSlug))) {
+      anime = await Anime.findByPk(animeSlug, {
+        include: [{
+          model: Episodio,
+          as: 'episodios',
+          attributes: ['numero', 'titulo', 'duracion', 'url_stream']
+        }]
+      });
+    }
 
     if (!anime) {
       return res.status(404).json({ error: "Anime no encontrado" });
@@ -306,6 +433,7 @@ app.get("/reproducir", authenticateToken, async (req, res) => {
         fechaVisto: new Date().toISOString(),
         animeTitle: anime.titulo,
         animeImage: anime.imagen,
+        animeSlug: anime.slug,
         progreso: 0,
       });
 
@@ -355,28 +483,45 @@ app.get("/reproducir", authenticateToken, async (req, res) => {
   }
 });
 
-// GET /episodios/:animeId/:episodio - Nuevo endpoint para obtener stream de episodio específico
+// GET /episodios/:animeSlug/:episodio - Endpoint actualizado para usar base de datos y slugs
 app.get(
-  "/episodios/:animeId/:episodio",
+  "/episodios/:animeSlug/:episodio",
   authenticateToken,
   async (req, res) => {
     try {
-      const { animeId, episodio } = req.params;
+      const { animeSlug, episodio } = req.params;
 
       // Validar parámetros
-      if (!animeId || !episodio) {
+      if (!animeSlug || !episodio) {
         return res.status(400).json({
-          error: "Los parámetros 'animeId' y 'episodio' son requeridos",
+          error: "Los parámetros 'animeSlug' y 'episodio' son requeridos",
         });
       }
 
       console.log(
-        `🎬 Solicitud de episodio - Anime ID: ${animeId}, Episodio: ${episodio}`
+        `🎬 Solicitud de episodio - Anime Slug: ${animeSlug}, Episodio: ${episodio}`
       );
 
-      // Buscar anime en la base de datos
-      const animes = await readJsonFile("animes.json");
-      const anime = animes.find((a) => a.id === parseInt(animeId));
+      // Buscar anime en la base de datos por slug
+      let anime = await Anime.findOne({
+        where: { slug: animeSlug },
+        include: [{
+          model: Episodio,
+          as: 'episodios',
+          attributes: ['numero', 'titulo', 'duracion', 'url_stream']
+        }]
+      });
+
+      // Si no se encuentra por slug, intentar por ID (fallback)
+      if (!anime && !isNaN(Number(animeSlug))) {
+        anime = await Anime.findByPk(animeSlug, {
+          include: [{
+            model: Episodio,
+            as: 'episodios',
+            attributes: ['numero', 'titulo', 'duracion', 'url_stream']
+          }]
+        });
+      }
 
       if (!anime) {
         return res.status(404).json({ error: "Anime no encontrado" });
@@ -409,6 +554,7 @@ app.get(
           fechaVisto: new Date().toISOString(),
           animeTitle: anime.titulo,
           animeImage: anime.imagen,
+          animeSlug: anime.slug,
           progreso: 0,
         });
 
@@ -650,7 +796,7 @@ app.delete("/favoritos/:slug", authenticateToken, async (req, res) => {
   }
 });
 
-// GET /historial - Historial de reproducción del usuario (base de datos)
+// GET /historial - Historial de reproducción del usuario (base de datos actualizado con slugs)
 app.get("/historial", authenticateToken, async (req, res) => {
   try {
     const user = await User.findByPk(req.user.id);
@@ -658,7 +804,7 @@ app.get("/historial", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Usuario no encontrado" });
     }
     const historial = Array.isArray(user.historial) ? user.historial : [];
-    // Enriquecer historial con título e imagen del anime
+    // Enriquecer historial con título, imagen y slug del anime
     const historialConDetalles = await Promise.all(
       historial.map(async (item) => {
         const anime = await Anime.findByPk(item.animeId);
@@ -666,6 +812,7 @@ app.get("/historial", authenticateToken, async (req, res) => {
           ...item,
           animeTitle: anime ? anime.titulo : "Anime no encontrado",
           animeImage: anime ? anime.imagen : null,
+          animeSlug: anime ? anime.slug : null,
         };
       })
     );
@@ -676,34 +823,52 @@ app.get("/historial", authenticateToken, async (req, res) => {
   }
 });
 
-// POST /historial - Agregar o actualizar entrada en historial (base de datos)
+// POST /historial - Agregar o actualizar entrada en historial (actualizado para manejar slugs)
 app.post("/historial", authenticateToken, async (req, res) => {
   try {
-    const { animeId, episodio, progreso } = req.body;
-    if (!animeId || !episodio || progreso === undefined) {
+    const { animeSlug, episodio, progreso } = req.body;
+    if (!animeSlug || !episodio || progreso === undefined) {
       return res
         .status(400)
-        .json({ error: "animeId, episodio y progreso son requeridos" });
+        .json({ error: "animeSlug, episodio y progreso son requeridos" });
     }
+    
+    // Buscar anime por slug para obtener el ID
+    let anime = await Anime.findOne({ where: { slug: animeSlug } });
+    
+    // Si no se encuentra por slug, intentar por ID (fallback)
+    if (!anime && !isNaN(Number(animeSlug))) {
+      anime = await Anime.findByPk(animeSlug);
+    }
+    
+    if (!anime) {
+      return res.status(404).json({ error: "Anime no encontrado" });
+    }
+    
     const user = await User.findByPk(req.user.id);
     if (!user) {
       return res.status(404).json({ error: "Usuario no encontrado" });
     }
+    
     const historial = Array.isArray(user.historial) ? [...user.historial] : [];
     const existingIndex = historial.findIndex(
-      (item) => item.animeId === animeId && item.episodio === episodio
+      (item) => item.animeId === anime.id && item.episodio === episodio
     );
+    
     const nuevaEntrada = {
-      animeId,
+      animeId: anime.id,
       episodio,
       progreso,
       fechaVisto: new Date().toISOString(),
+      animeSlug: anime.slug
     };
+    
     if (existingIndex !== -1) {
       historial[existingIndex] = nuevaEntrada;
     } else {
       historial.unshift(nuevaEntrada);
     }
+    
     // Limitar a 50 registros
     const limitedHist = historial.slice(0, 50);
     await user.update({ historial: limitedHist });
