@@ -6,17 +6,21 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon index.js",
-    "start": "node index.js"
+    "start": "node index.js",
+    "bench:servers": "node benchmark/servers-benchmark.js"
   },
   "dependencies": {
     "axios": "^1.11.0",
     "bcryptjs": "^2.4.3",
     "cheerio": "^1.1.2",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
+    "p-limit": "^4.0.0",
     "puppeteer": "^24.15.0",
+    "redis": "^4.7.1",
     "sequelize": "^6.37.7",
     "sqlite3": "^5.1.7"
   },

@@ -128,21 +128,26 @@ export const initDatabase = async () => {
     console.log('📁 Ruta de la base de datos:', path.join(__dirname, 'animefest.sqlite'));
     
     await sequelize.authenticate();
-    console.log('✅ Conexión a SQLite establecida correctamente.');
+    console.log(' Conexión a SQLite establecida correctamente.');
     
-    // ✅ NUEVO: Configuraciones anti-bloqueo
+    // Configuraciones anti-bloqueo
     await sequelize.query('PRAGMA journal_mode = WAL;');
     await sequelize.query('PRAGMA busy_timeout = 5000;'); // 5 segundos de espera si está ocupada
     
-    // Sincronizar modelos (crear tablas si no existen)
-    await sequelize.sync({ alter: true });
-    console.log('✅ Modelos sincronizados correctamente.');
-    console.log('📄 Base de datos creada en:', path.join(__dirname, 'animefest.sqlite'));
+    try {
+      await sequelize.sync({ alter: false }); // Cambiar a false para evitar conflictos de migración
+      console.log(' Modelos sincronizados correctamente.');
+    } catch (syncError) {
+      console.warn(' Sync con alter falló, intentando sync básico:', syncError.message);
+      await sequelize.sync({ force: false });
+      console.log(' Modelos sincronizados con sync básico.');
+    }
+    console.log(' Base de datos creada en:', path.join(__dirname, 'animefest.sqlite'));
     
     return true;
   } catch (error) {
-    console.error('❌ Error al conectar con la base de datos:', error);
-    console.error('📋 Detalles del error:', error.message);
+    console.error(' Error al conectar con la base de datos:', error);
+    console.error(' Detalles del error:', error.message);
     return false;
   }
 };

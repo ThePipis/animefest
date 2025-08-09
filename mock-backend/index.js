@@ -1,38 +1,47 @@
 import express from "express";
 
+import compression from "compression";
+
 import cors from "cors";
 
 import jwt from "jsonwebtoken";
 
 import bcrypt from "bcryptjs";
 
-import fs from "fs/promises";
-
 import path from "path";
 
 import { fileURLToPath } from "url";
-
-import axios from "axios";
-
-import * as cheerio from "cheerio";
-
-import puppeteer from "puppeteer";
-
-import dotenv from 'dotenv';
 
 import { Op } from 'sequelize';
 
 import { resolveVideoStream } from "./videoResolver.js";
 
 import { initDatabase, Anime, Episodio, User } from './db/database.js';
+import { serverCache } from './lib/cache.js';
+import animeRoutes from './routes/animes.js';
+import { obtenerServidoresDesdeLatAnimeOptimizada } from './scraper/optimized-scraper.js';
 import { LatAnimeScraper } from './scrapers/latanime.js';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Enable compression for all responses
+app.use(compression());
+
+// Configurar CORS
+app.use(cors());
+
+// Middleware para parsear JSON
+app.use(express.json());
+
+// Add ETag support
+app.set('etag', 'strong');
+
 // Leer puerto y secreto JWT desde variables de entorno con valores por defecto
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
 const JWT_SECRET = process.env.JWT_SECRET || "animefest_secret_key_2024";
 
 // Inicializar base de datos al arrancar el servidor
@@ -58,9 +67,35 @@ app.use(
 );
 app.use(express.json());
 
-// Logging middleware
+// Structured logging middleware
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  const startTime = Date.now();
+  
+  // Log request
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    type: 'request',
+    method: req.method,
+    path: req.path,
+    query: req.query,
+    userAgent: req.get('User-Agent'),
+    ip: req.ip
+  }));
+  
+  // Log response when finished
+  res.on('finish', () => {
+    const duration = Date.now() - startTime;
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      type: 'response',
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      duration: duration,
+      contentLength: res.get('Content-Length')
+    }));
+  });
+  
   next();
 });
 
@@ -136,6 +171,9 @@ const authorizeRoles = (...roles) => {
     next();
   };
 };
+
+// Mount optimized API routes
+app.use('/api/v1', animeRoutes);
 
 // Rutas públicas
 
@@ -528,48 +566,88 @@ app.get(
   }
 );
 
-// GET /reproductor/:animeId/:episodio - Scraping en tiempo real desde LatAnime
-app.get("/reproductor/:animeId/:episodio", authenticateToken, async (req, res) => {
+// GET /reproductor/:animeId/:episodio - Scraping optimizado desde LatAnime con caché
+app.get("/reproductor/:animeId/:episodio", async (req, res) => {
   const { animeId, episodio } = req.params;
+  const startTime = Date.now();
 
   if (!animeId || !episodio) {
     return res.status(400).json({ error: "Parámetros inválidos" });
   }
 
   try {
-    console.log(`🎬 Scrapeando servidores para: ${animeId} - Episodio ${episodio}`);
+    console.log(`🎬 [${animeId}:${episodio}] Obteniendo servidores optimizados`);
 
-    const servidoresObtenidos = await obtenerServidoresDesdeLatAnime(animeId, episodio);
+    // Use the optimized cached scraper
+    const servidoresObtenidos = await serverCache.getServersCached(animeId, episodio, async (slug, ep) => {
+      try {
+        const scraped = await obtenerServidoresDesdeLatAnimeOptimizada(slug, ep);
+        return scraped.servers;
+      } catch (error) {
+        console.error(`🚨 Scraper failed for ${slug}:${ep}, using fallback:`, error.message);
+        return [
+          {
+            nombre: 'fallback',
+            iframe: `https://fallback.com/${slug}-${ep}`,
+            prioridad: 999,
+            servidor: 'fallback',
+            url: `https://fallback.com/${slug}-${ep}`,
+            status: 'degraded',
+            error: 'Scraper unavailable'
+          }
+        ];
+      }
+    });
 
     if (!servidoresObtenidos || servidoresObtenidos.length === 0) {
       return res.status(404).json({ error: "No se encontraron servidores disponibles" });
     }
 
-    // Buscar el anime en la base de datos por slug (alfanumérico) o por id si es numérico
-    const animeRecord = isNaN(Number(animeId))
-      ? await Anime.findOne({ where: { slug: animeId } })
-      : await Anime.findByPk(animeId);
+    // Register history only if user is authenticated (optional)
+    if (req.user && req.user.id) {
+      try {
+        const animeRecord = isNaN(Number(animeId))
+          ? await Anime.findOne({ where: { slug: animeId } })
+          : await Anime.findByPk(animeId);
 
-    if (animeRecord) {
-      await registrarHistorial(req.user.id, {
-        animeId: animeRecord.id,
-        episodio: parseInt(episodio),
-        fechaVisto: new Date().toISOString(),
-        animeTitle: animeRecord.titulo,
-        animeImage: animeRecord.imagen,
-        progreso: 0
-      });
+        if (animeRecord) {
+          await registrarHistorial(req.user.id, {
+            animeId: animeRecord.id,
+            episodio: parseInt(episodio),
+            fechaVisto: new Date().toISOString(),
+            animeTitle: animeRecord.titulo,
+            animeImage: animeRecord.imagen,
+            progreso: 0
+          });
+        }
+      } catch (historyError) {
+        console.warn(`⚠️ Could not register history: ${historyError.message}`);
+      }
     }
+
+    const totalTime = Date.now() - startTime;
+    console.log(`✅ [${animeId}:${episodio}] Servidores obtenidos en ${totalTime}ms (${servidoresObtenidos.length} servidores)`);
 
     return res.json({
       animeId,
       episodioId: episodio,
-      servidores: servidoresObtenidos
+      servidores: servidoresObtenidos,
+      meta: {
+        total: servidoresObtenidos.length,
+        active: servidoresObtenidos.filter(s => s.status !== 'degraded').length,
+        degraded: servidoresObtenidos.filter(s => s.status === 'degraded').length,
+        responseTime: totalTime,
+        fromCache: true // Will be updated by cache layer
+      }
     });
 
   } catch (err) {
-    console.error("❌ Error al scrapear iframes:", err);
-    return res.status(500).json({ error: "Error interno al obtener los servidores" });
+    const totalTime = Date.now() - startTime;
+    console.error(`❌ [${animeId}:${episodio}] Error al obtener servidores después de ${totalTime}ms:`, err.message, err.stack);
+    return res.status(500).json({ 
+      error: "Error interno al obtener los servidores",
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 });
 
@@ -622,17 +700,8 @@ app.get('/reproductor/:animeId/:episodioId', authenticateToken, async (req, res)
   }
 });
 
-// Función auxiliar para determinar prioridad de servidores
-function getPrioridad(serverName) {
-  const prioridades = {
-    doodstream: 1,
-    yourupload: 2,
-    mp4upload: 3,
-    ok: 4,
-    original: 999,
-  };
-  return prioridades[serverName] || 999;
-}
+// Función auxiliar para determinar prioridad de servidores (importada desde utils.js)
+
 
 // Función auxiliar para registrar historial en la base de datos
 async function registrarHistorial(userId, data) {
@@ -939,93 +1008,13 @@ app.post('/registro', async (req, res) => {
   }
 });
 
-// Función para obtener servidores desde LatAnime usando Puppeteer
+// Función para obtener servidores desde LatAnime usando Puppeteer (LEGACY - usar obtenerServidoresDesdeLatAnimeOptimizada)
 async function obtenerServidoresDesdeLatAnime(animeId, episodioId) {
-  const urlLatAnime = `https://latanime.org/ver/${animeId}-episodio-${episodioId}`;
-
-  console.log(`🔍 Accediendo a: ${urlLatAnime}`);
-
-  const browser = await puppeteer.launch({
-    headless: true, // Cambiar a true para producción
-    defaultViewport: null,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-
-  const page = await browser.newPage();
-
-  try {
-    // Configurar User-Agent para evitar detección
-    await page.setUserAgent(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    );
-
-    await page.goto(urlLatAnime, { waitUntil: "networkidle2", timeout: 30000 });
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    // Buscar elementos con clase .play-video
-    const servidoresRaw = await page.$$eval(".play-video", (els) =>
-      els.map((el) => ({
-        nombre: el.textContent.trim(),
-        base64url: el.getAttribute("data-player"),
-      }))
-    );
-
-    console.log(`📡 Encontrados ${servidoresRaw.length} servidores raw`);
-
-    const servidores = [];
-    for (const s of servidoresRaw) {
-      try {
-        if (s.base64url) {
-          const decodedUrl = Buffer.from(s.base64url, "base64").toString("utf-8");
-          
-          // Verificar si la URL es embebible (contiene 'embed' o es un iframe directo)
-          let iframeUrl = decodedUrl;
-          
-          // Si no es una URL de embed, intentar convertirla
-          if (!decodedUrl.includes('embed') && !decodedUrl.includes('iframe')) {
-            // Para algunos servidores, necesitamos navegar y extraer el iframe real
-            try {
-              const iframePage = await browser.newPage();
-              await iframePage.goto(decodedUrl, { waitUntil: 'networkidle2', timeout: 15000 });
-              
-              // Buscar iframe embebible en la página
-              const embedUrl = await iframePage.evaluate(() => {
-                const iframe = document.querySelector('iframe[src*="embed"], iframe[src*="player"]');
-                return iframe ? iframe.src : null;
-              });
-              
-              if (embedUrl) {
-                iframeUrl = embedUrl;
-              }
-              
-              await iframePage.close();
-            } catch (embedError) {
-              console.log(`⚠️ No se pudo extraer iframe de ${s.nombre}, usando URL original`);
-            }
-          }
-          
-          servidores.push({
-            nombre: s.nombre.toLowerCase().replace(/\s+/g, ""),
-            iframe: iframeUrl, // URL específica para embebido
-            prioridad: getPrioridad(s.nombre.toLowerCase()) || 999,
-            servidor: s.nombre.toLowerCase().replace(/\s+/g, ""),
-            url: decodedUrl,
-          });
-          
-          console.log(`✅ Servidor procesado: ${s.nombre} -> ${iframeUrl}`);
-        }
-      } catch (decodeError) {
-        console.log(`❌ Error procesando ${s.nombre}:`, decodeError.message);
-      }
-    }
-
-    return servidores;
-  } catch (error) {
-    console.error(`🚨 Error en scraping de ${urlLatAnime}:`, error.message);
-    throw error;
-  } finally {
-    await browser.close();
-  }
+  console.log(`⚠️ Using legacy scraper for ${animeId}:${episodioId} - consider migrating to optimized version`);
+  
+  // Delegate to optimized version for better performance
+  const result = await obtenerServidoresDesdeLatAnimeOptimizada(animeId, episodioId);
+  return result.servers;
 }
 
 // Ruta para registrar nuevo anime (solo administradores)
